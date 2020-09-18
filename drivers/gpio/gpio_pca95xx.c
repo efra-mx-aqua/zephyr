@@ -179,24 +179,42 @@ static int write_port_regs(const struct device *dev, uint8_t reg,
 	const struct gpio_pca95xx_config * const config = dev->config;
 	struct gpio_pca95xx_drv_data * const drv_data =
 		(struct gpio_pca95xx_drv_data * const)dev->data;
-	const struct device *i2c_master = drv_data->i2c_master;
+	struct device * const i2c_master = drv_data->i2c_master;
 	uint16_t i2c_addr = config->i2c_slave_addr;
 	uint16_t port_data;
+	uint8_t *port_data_ptr;
+	uint8_t buf[2];
 	int ret;
 
-	LOG_DBG("PCA95XX[0x%X]: Write: REG[0x%X] = 0x%X, REG[0x%X] = "
-		"0x%X", i2c_addr, reg, (value & 0xFF),
-		(reg + 1), (value >> 8));
-
 	port_data = sys_cpu_to_le16(value);
+	port_data_ptr = (uint8_t *)&port_data;
 
-	ret = i2c_burst_write(i2c_master, i2c_addr, reg,
-			      (uint8_t *)&port_data, sizeof(port_data));
+	buf[0] = reg;
+	buf[1] = port_data_ptr[0];
+	LOG_DBG("PCA95XX[0x%X]: Write: REG[0x%X] = 0x%X", i2c_addr, buf[0],
+		buf[1]);
+
+	ret = i2c_write(i2c_master, buf, 2, i2c_addr);
+	if (ret) {
+		LOG_ERR("PCA95XX[0x%X]: error writing to register 0x%X "
+			"(%d)", i2c_addr, buf[0], ret);
+		return ret;
+	}
+
+	buf[0] = reg + 1;
+	buf[1] = port_data_ptr[1];
+	LOG_DBG("PCA95XX[0x%X]: Write: REG[0x%X] = 0x%X", i2c_addr, buf[0],
+		buf[1]);
+
+	ret = i2c_write(i2c_master, buf, 2, i2c_addr);
 	if (ret == 0) {
 		*cache = value;
 	} else {
+		/* MSB failed to update, we must preserve its value */
+		port_data_ptr[1] = (uint8_t)(*cache >> 8);
+		*cache = sys_le16_to_cpu(port_data);
 		LOG_ERR("PCA95XX[0x%X]: error writing to register 0x%X "
-			"(%d)", i2c_addr, reg, ret);
+			"(%d)", i2c_addr, buf[0], ret);
 	}
 
 	return ret;
