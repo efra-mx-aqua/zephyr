@@ -53,6 +53,8 @@ extern "C" {
 struct flash_area {
 	/** ID number */
 	uint8_t fa_id;
+	/** Partition name */
+	const char *fa_name;
 	/** Provided for compatibility with MCUboot */
 	uint8_t fa_device_id;
 	uint16_t pad16;

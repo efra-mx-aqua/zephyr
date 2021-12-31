@@ -12,6 +12,7 @@
 
 #define FLASH_AREA_FOO(part)						\
 	{.fa_id = DT_FIXED_PARTITION_ID(part),				\
+	 .fa_name = DT_LABEL(part),					\
 	 .fa_off = DT_REG_ADDR(part),					\
 	 .fa_dev_name = DT_LABEL(DT_MTD_FROM_FIXED_PARTITION(part)),	\
 	 .fa_size = DT_REG_SIZE(part),},
