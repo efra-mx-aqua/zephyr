@@ -242,3 +242,24 @@ int mdm_receiver_register(struct mdm_receiver_context *ctx,
 	mdm_receiver_setup(ctx);
 	return 0;
 }
+
+int mdm_receiver_unregister(struct mdm_receiver_context *ctx)
+{
+	int i;
+
+	if (!ctx->uart_dev) {
+		return -ENODEV;
+	}
+
+	uart_irq_rx_disable(ctx->uart_dev);
+	uart_irq_tx_disable(ctx->uart_dev);
+	mdm_receiver_flush(ctx);
+
+	for (i = 0; i < MAX_MDM_CTX; i++) {
+		if (contexts[i] && contexts[i]->uart_dev == ctx->uart_dev) {
+			contexts[i] = NULL;
+		}
+	}
+
+	return 0;
+}

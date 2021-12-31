@@ -90,6 +90,17 @@ int mdm_receiver_register(struct mdm_receiver_context *ctx,
 			  const struct device *uart_dev,
 			  uint8_t *buf, size_t size);
 
+/**
+ * @brief  Unregisters receiver context.
+ *
+ * @note   Disables the device.
+ *
+ * @param  *ctx: receiver context to register.
+ *
+ * @retval 0 if ok, < 0 if error.
+ */
+int mdm_receiver_unregister(struct mdm_receiver_context *ctx);
+
 int mdm_receiver_sleep(struct mdm_receiver_context *ctx);
 
 int mdm_receiver_wake(struct mdm_receiver_context *ctx);
