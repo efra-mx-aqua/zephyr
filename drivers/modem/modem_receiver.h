@@ -27,7 +27,7 @@ struct mdm_receiver_context {
 	/* rx data */
 	struct ring_buf rx_rb;
 	struct k_sem rx_sem;
-
+	int network_retries;
 	/* modem data */
 	char *data_manufacturer;
 	char *data_model;
@@ -38,6 +38,8 @@ struct mdm_receiver_context {
 #endif
 	char *data_iccid;
 	int   data_rssi;
+	int   data_rsrp;
+	int   data_rsrq;
 };
 
 /**
