@@ -74,11 +74,11 @@ struct modem_context {
 	int   data_cached_operator;
 #endif
 #if defined(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI)
-	int   data_rscp;
-	int   data_rsrp;
-	float data_rsrq;
+	int   *data_rscp;
+	int   *data_rsrp;
+	float *data_rsrq;
 #endif
-	int   data_rssi;
+	int   *data_rssi;
 	bool  is_automatic_oper;
 	int   attach_max_retries;
 	int   auto_cops_max_retries;
