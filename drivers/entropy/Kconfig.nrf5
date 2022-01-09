@@ -15,6 +15,7 @@ menuconfig ENTROPY_NRF5_RNG
 	bool "nRF5 RNG driver"
 	depends on !ENTROPY_NRF_FORCE_ALT
 	depends on HAS_HW_NRF_RNG
+	depends on MULTITHREADING
 	select ENTROPY_HAS_DRIVER
 	default y
 	help
