@@ -456,7 +456,8 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_attached)
 
 
 static const struct modem_cmd read_cops_cmd =
-	MODEM_CMD("+COPS", on_cmd_atcmdinfo_cops, 3U, ",");
+	// FIXME: temporary hack... or is it?
+	MODEM_CMD("+COPS", on_cmd_atcmdinfo_cops, 1U, ",");
 
 static const struct modem_cmd check_attached_cmd =
 	MODEM_CMD("+CGATT:", on_cmd_atcmdinfo_attached, 1U, ",");
@@ -469,6 +470,8 @@ static const struct setup_cmd connect_cmds[] = {
 static int gsm_setup_mccmno(struct gsm_modem *gsm)
 {
 	int ret = 0;
+	// FIXME: temporary hack
+	return 0;
 
 	if (CONFIG_MODEM_GSM_MANUAL_MCCMNO[0]) {
 		/* use manual MCC/MNO entry */
