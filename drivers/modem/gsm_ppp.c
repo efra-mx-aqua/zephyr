@@ -436,9 +436,6 @@ static const struct setup_cmd setup_cmds[] = {
 
 	/* disable unsolicited network registration codes */
 	SETUP_CMD_NOHANDLE("AT+CREG=0"),
-
-	/* create PDP context */
-	SETUP_CMD_NOHANDLE("AT+CGDCONT=1,\"IP\",\"" CONFIG_MODEM_GSM_APN "\""),
 };
 
 MODEM_CMD_DEFINE(on_cmd_atcmdinfo_attached)
@@ -575,6 +572,17 @@ static void rssi_handler(struct k_work *work)
 
 }
 
+int __weak gsm_ppp_setup_hook(struct modem_context *ctx, struct k_sem *sem)
+{
+	return 0;
+}
+
+int __weak gsm_ppp_pre_connect_hook(struct modem_context *ctx,
+				    struct k_sem *sem)
+{
+	return 0;
+}
+
 static void gsm_finalize_connection(struct gsm_modem *gsm)
 {
 	int ret = 0;
@@ -639,6 +647,28 @@ static void gsm_finalize_connection(struct gsm_modem *gsm)
 		return;
 	}
 
+	ret = gsm_ppp_setup_hook(&gsm->context, &gsm->sem_response);
+	if (ret < 0) {
+		(void)k_work_reschedule(&gsm->gsm_configure_work, K_SECONDS(1));
+		return;
+	}
+
+	/* create PDP context */
+	ret = modem_cmd_send_nolock(&gsm->context.iface,
+				    &gsm->context.cmd_handler,
+				    &response_cmds[0],
+				    ARRAY_SIZE(response_cmds),
+				    "AT+CGDCONT=1,\"IP\",\"" CONFIG_MODEM_GSM_APN "\"",
+				    &gsm->sem_response,
+				    GSM_CMD_AT_TIMEOUT);
+	if (ret < 0) {
+		LOG_DBG("Couldn't create PDP context (error %d), %s", ret,
+			"retrying...");
+		(void)k_work_reschedule(&gsm->gsm_configure_work, K_SECONDS(1));
+		return;
+	}
+
+
 attaching:
 	/* Don't initialize PPP until we're attached to packet service */
 	ret = modem_cmd_send_nolock(&gsm->context.iface,
@@ -693,6 +723,12 @@ attaching:
 #if defined(CONFIG_MODEM_CELL_INFO)
 		(void) gsm_query_cellinfo(gsm);
 #endif
+	}
+
+	ret = gsm_ppp_pre_connect_hook(&gsm->context, &gsm->sem_response);
+	if (ret < 0) {
+		(void)k_work_reschedule(&gsm->gsm_configure_work, K_SECONDS(1));
+		return;
 	}
 
 	LOG_DBG("modem setup returned %d, %s", ret, "enable PPP");
