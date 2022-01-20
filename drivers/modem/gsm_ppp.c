@@ -932,7 +932,7 @@ attaching:
 	set_ppp_carrier_on(gsm);
 #endif
 
-	if (IS_ENABLED(CONFIG_GSM_MUX) && gsm->mux_enabled) {
+	if (IS_ENABLED(CONFIG_GSM_MUX)) {
 		/* Re-use the original iface for AT channel */
 		ret = modem_iface_uart_init_dev(&gsm->context.iface,
 						gsm->at_dev);
@@ -1137,7 +1137,6 @@ static void mux_setup(struct k_work *work)
 						gsm->ppp_dev);
 		if (ret < 0) {
 			LOG_DBG("iface %suart error %d", "PPP ", ret);
-			gsm->mux_enabled = false;
 			goto fail;
 		}
 
@@ -1187,28 +1186,22 @@ static void gsm_configure(struct k_work *work)
 		gsm->mux_setup_done = false;
 
 		ret = mux_enable(gsm);
-		if (ret == 0) {
-			gsm->mux_enabled = true;
-		} else {
-			gsm->mux_enabled = false;
+		if (ret) {
+			LOG_DBG("GSM muxing %s", "disabled");
 			(void)gsm_work_reschedule(&gsm->gsm_configure_work,
 						K_NO_WAIT);
 			return;
 		}
 
-		LOG_DBG("GSM muxing %s", gsm->mux_enabled ? "enabled" :
-							    "disabled");
+		LOG_DBG("GSM muxing %s", "enabled");
+		gsm->mux_enabled = true;
 
-		if (gsm->mux_enabled) {
-			gsm->state = STATE_INIT;
+		gsm->state = STATE_INIT;
 
-			k_work_init_delayable(&gsm->gsm_configure_work,
-					      mux_setup);
+		k_work_init_delayable(&gsm->gsm_configure_work, mux_setup);
 
-			(void)k_work_reschedule(&gsm->gsm_configure_work,
-						K_NO_WAIT);
-			return;
-		}
+		(void)gsm_work_reschedule(&gsm->gsm_configure_work, K_NO_WAIT);
+		return;
 	}
 
 	k_work_init_delayable(&gsm->gsm_configure_work, gsm_finalize_connection);
