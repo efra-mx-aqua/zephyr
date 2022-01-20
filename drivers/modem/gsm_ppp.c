@@ -665,9 +665,11 @@ int __weak gsm_ppp_pre_connect_hook(struct modem_context *ctx,
 	return 0;
 }
 
-static void gsm_finalize_connection(struct gsm_modem *gsm)
+static void gsm_finalize_connection(struct k_work *work)
 {
 	int ret = 0;
+	struct k_work_delayable *dwork = k_work_delayable_from_work(work);
+	struct gsm_modem *gsm = CONTAINER_OF(dwork, struct gsm_modem, gsm_configure_work);
 
 	/* If already attached, jump right to RSSI readout */
 	if (gsm->attached) {
@@ -1058,7 +1060,8 @@ static void mux_setup(struct k_work *work)
 		LOG_INF("PPP channel %d connected to %s",
 			DLCI_PPP, gsm->ppp_dev->name);
 
-		gsm_finalize_connection(gsm);
+		k_work_init_delayable(&gsm->gsm_configure_work, gsm_finalize_connection);
+		(void)gsm_work_reschedule(&gsm->gsm_configure_work, K_NO_WAIT);
 		break;
 	}
 
@@ -1124,7 +1127,8 @@ static void gsm_configure(struct k_work *work)
 		}
 	}
 
-	gsm_finalize_connection(gsm);
+	k_work_init_delayable(&gsm->gsm_configure_work, gsm_finalize_connection);
+	(void)gsm_work_reschedule(&gsm->gsm_configure_work, K_NO_WAIT);
 }
 
 void gsm_ppp_start(const struct device *dev)
