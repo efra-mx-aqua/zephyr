@@ -87,6 +87,7 @@ static struct gsm_modem {
 	struct modem_cmd_handler_data cmd_handler_data;
 	uint8_t cmd_match_buf[GSM_CMD_READ_BUF];
 	struct k_sem sem_response;
+	struct k_sem sem_if_down;
 
 	struct modem_iface_uart_data gsm_data;
 	struct k_work_delayable gsm_configure_work;
@@ -122,6 +123,7 @@ static struct gsm_modem {
 
 	gsm_modem_power_cb modem_on_cb;
 	gsm_modem_power_cb modem_off_cb;
+	struct net_mgmt_event_callback gsm_mgmt_cb;
 } gsm;
 
 NET_BUF_POOL_DEFINE(gsm_recv_pool, GSM_RECV_MAX_BUF, GSM_RECV_BUF_SIZE, 0, NULL);
@@ -1265,7 +1267,8 @@ void gsm_ppp_stop(const struct device *dev)
 
 	net_if_l2(iface)->enable(iface, false);
 
-	LOG_INF("GSM PPP stop");
+	/* wait for the interface to be properly down */
+	(void)k_sem_take(&gsm->sem_if_down, K_FOREVER);
 
 	if (IS_ENABLED(CONFIG_GSM_MUX)) {
 		/* Lower mux_enabled flag to trigger re-sending AT+CMUX etc */
@@ -1389,6 +1392,26 @@ const struct gsm_ppp_modem_info *gsm_ppp_modem_info(const struct device *dev)
 	return &gsm->minfo;
 }
 
+static void gsm_mgmt_event_handler(struct net_mgmt_event_callback *cb,
+			  uint32_t mgmt_event, struct net_if *iface)
+{
+	if ((mgmt_event & NET_EVENT_IF_DOWN) != mgmt_event) {
+		return;
+	}
+
+	/* Right now we only support 1 GSM instance */
+	if (iface != gsm.iface) {
+		return;
+	}
+
+	if (mgmt_event == NET_EVENT_IF_DOWN) {
+		LOG_INF("GSM network interface down");
+		/* raise semaphore to indicate the interface is down */
+		k_sem_give(&gsm.sem_if_down);
+		return;
+	}
+}
+
 static int gsm_init(const struct device *dev)
 {
 	struct gsm_modem *gsm = dev->data;
@@ -1408,6 +1431,7 @@ static int gsm_init(const struct device *dev)
 	gsm->cmd_handler_data.eol = "\r";
 
 	k_sem_init(&gsm->sem_response, 0, 1);
+	k_sem_init(&gsm->sem_if_down, 0, 1);
 
 	r = modem_cmd_handler_init(&gsm->context.cmd_handler,
 				   &gsm->cmd_handler_data);
@@ -1496,6 +1520,10 @@ static int gsm_init(const struct device *dev)
 		gsm->gsm_rx_tid = 0;
 		return -ENODEV;
 	}
+	net_mgmt_init_event_callback(&gsm->gsm_mgmt_cb, gsm_mgmt_event_handler,
+				     NET_EVENT_IF_DOWN);
+	net_mgmt_add_event_callback(&gsm->gsm_mgmt_cb);
+
 	if (IS_ENABLED(CONFIG_GSM_PPP_AUTOSTART)) {
 		gsm_ppp_start(dev);
 	}
