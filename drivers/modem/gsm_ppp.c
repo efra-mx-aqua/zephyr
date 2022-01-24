@@ -555,10 +555,10 @@ static void rssi_handler(struct k_work *work)
 {
 	int ret;
 #if defined(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI)
-	ret = modem_cmd_send_nolock(&gsm.context.iface, &gsm.context.cmd_handler,
+	ret = modem_cmd_send(&gsm.context.iface, &gsm.context.cmd_handler,
 		&read_rssi_cmd, 1, "AT+CESQ", &gsm.sem_response, GSM_CMD_SETUP_TIMEOUT);
 #else
-	ret = modem_cmd_send_nolock(&gsm.context.iface, &gsm.context.cmd_handler,
+	ret = modem_cmd_send(&gsm.context.iface, &gsm.context.cmd_handler,
 		&read_rssi_cmd, 1, "AT+CSQ", &gsm.sem_response, GSM_CMD_SETUP_TIMEOUT);
 #endif
 
