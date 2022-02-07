@@ -179,6 +179,14 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_cops)
 		LOG_INF("operator: %u",
 			gsm.context.data_operator);
 #endif
+#if defined(CONFIG_MODEM_CACHE_OPERATOR)
+		/* Fail-safe against operator format being wrong */
+		if (gsm.context.data_operator) {
+			gsm.context.data_cached_operator =
+				gsm.context.data_operator;
+		}
+
+#endif
 		if (unquoted_atoi(argv[0], 10) == 0) {
 			gsm.context.is_automatic_oper = true;
 		} else {
@@ -652,7 +660,7 @@ static void gsm_finalize_connection(struct gsm_modem *gsm)
 
 	ret = gsm_ppp_setup_hook(&gsm->context, &gsm->sem_response);
 	if (ret < 0) {
-		(void)k_work_reschedule(&gsm->gsm_configure_work, K_SECONDS(1));
+		(void)k_work_reschedule(&gsm->gsm_configure_work, K_SECONDS(5));
 		return;
 	}
 

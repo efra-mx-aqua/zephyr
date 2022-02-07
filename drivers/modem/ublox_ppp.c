@@ -404,44 +404,6 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_cind)
 	return 0;
 }
 
-/* Handler: +COPS: <mode>[,<format>,<oper>[,<AcT>]]
- */
-static char cached_operator[10];
-MODEM_CMD_DEFINE(on_cmd_atcmdinfo_cops)
-{
-	char buf[40];
-	size_t out_len;
-	char *operator;
-	char *ptr;
-
-	out_len = net_buf_linearize(buf, sizeof(buf) - 1,
-				    data->rx_buf, 0, len);
-	buf[out_len] = '\0';
-
-	/* <oper> should always have quotation marks around it */
-	operator = strchr(buf, '"');
-	if (!operator) {
-		return -EIO;
-	}
-
-	/* NULL terminate <oper> if needed */
-	ptr = strchr(operator + 1, '"');
-	if (!ptr) {
-		return -EIO;
-	}
-	*(ptr + 1) = '\0';
-
-	LOG_WRN("Operator is %s", log_strdup(operator));
-
-	/* Fail-safe against operator format being wrong */
-	if (atoi(operator + 1)) {
-		strncpy(cached_operator, operator, sizeof(cached_operator));
-	}
-
-	k_sem_give(&ublox_sem);
-	return 0;
-}
-
 /* Poll the network status. Should return non-negative to indicate
  * that the network is ready to use.
  */
@@ -474,35 +436,6 @@ static int gsm_poll_network_status(struct modem_context *ctx, struct k_sem *sem)
 		return -EIO;
 	}
 
-	/* If connected, attempt to cache the operator for later use. Note:
-	 * don't return -errno on error here because it's on best-effort basis.
-	 */
-
-	/* Change operator format to numeric */
-	ret = modem_cmd_send_nolock(&ctx->iface,
-				    &ctx->cmd_handler,
-				    NULL, 0,
-				    "AT+COPS=3,2",
-				    sem,
-				    K_SECONDS(2));
-	if (ret) {
-		LOG_WRN("AT+COPS=3,2 timeout");
-		return 0;
-	}
-
-	/* Read out operator and cache it for future connections */
-	struct modem_cmd cops_cmd =
-		MODEM_CMD("+COPS:", on_cmd_atcmdinfo_cops, 0U, "");
-	ret = modem_cmd_send_nolock(&ctx->iface,
-				    &ctx->cmd_handler,
-				    &cops_cmd, 1,
-				    "AT+COPS?",
-				    &ublox_sem,
-				    K_SECONDS(5));
-	if (ret) {
-		LOG_WRN("AT+COPS? timeout");
-	}
-
 	return 0;
 }
 
@@ -516,6 +449,7 @@ int gsm_ppp_setup_hook(struct modem_context *ctx, struct k_sem *sem)
 {
 	int ret;
 	static char manual_cops[1 + sizeof("AT+COPS=1,2,\"12345\"")];
+	int operator;
 
 	ret = gsm_setup_mnoprof(ctx, sem);
 	if (ret < 0) {
@@ -541,12 +475,16 @@ int gsm_ppp_setup_hook(struct modem_context *ctx, struct k_sem *sem)
 		return ret;
 	}
 
-	if (!cached_operator[0]) {
+#if defined(CONFIG_MODEM_CACHE_OPERATOR)
+	if (!ctx->data_cached_operator) {
 		LOG_INF("No cached operator");
 		return ret;
 	}
-
-	sprintf(manual_cops, "AT+COPS=1,2,%s", cached_operator);
+	operator = ctx->data_cached_operator;
+#else
+	operator = ctx->data_operator;
+#endif
+	sprintf(manual_cops, "AT+COPS=1,2,%d", operator);
 	LOG_INF("Manual operator cmd: %s", log_strdup(manual_cops));
 
 	/* Best effort basis ie don't signal failure if this fails */

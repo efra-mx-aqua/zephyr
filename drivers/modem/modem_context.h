@@ -71,6 +71,9 @@ struct modem_context {
 	int   data_lac;
 	int   data_cellid;
 #endif
+#if defined(CONFIG_MODEM_CACHE_OPERATOR)
+	int   data_cached_operator;
+#endif
 	int   data_rssi;
 	bool  is_automatic_oper;
 	/* pin config */

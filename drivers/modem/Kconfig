@@ -138,6 +138,12 @@ config MODEM_CELL_INFO
 	help
 	  Query for numerical operator id, location area code and cell id.
 
+config MODEM_CACHE_OPERATOR
+	bool "Enable caching the operator"
+	depends on MODEM_CELL_INFO
+	help
+	  Cache numerical operator id.
+
 source "drivers/modem/Kconfig.ublox_ppp"
 source "drivers/modem/Kconfig.ublox-sara-r4"
 source "drivers/modem/Kconfig.quectel-bg9x"
