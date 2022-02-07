@@ -28,7 +28,9 @@ struct modem_info {
 	int mdm_psm;
 	char mdm_urat[MDM_URAT_LENGTH];
 	uint64_t mdm_bandmask[MDM_UBANDMASKS];
-	int mdm_rssi;
+	int mdm_signal;
+	int mdm_simcard_status;
+	int mdm_roaming;
 	int mdm_service;
 };
 
@@ -362,36 +364,25 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_cind)
 
 		switch (i) {
 		case 1:
-			switch (v) {
-			default:
-			case 0:
-				minfo.mdm_rssi = -106;
-				break;
-			case 1:
-				minfo.mdm_rssi = -92;
-				break;
-			case 2:
-				minfo.mdm_rssi = -82;
-				break;
-			case 3:
-				minfo.mdm_rssi = -70;
-				break;
-			case 4:
-				minfo.mdm_rssi = -58;
-				break;
-			case 5:
-				minfo.mdm_rssi = -57;
-				break;
-			}
-			if (v == 5) {
-				LOG_INF("RSSI: >=%d dBm", minfo.mdm_rssi);
-			} else {
-				LOG_INF("RSSI: <%d dBm", minfo.mdm_rssi + 1);
-			}
+			minfo.mdm_signal = v;
+			LOG_INF("Signal strength: %d", minfo.mdm_signal);
 			break;
 		case 2:
 			LOG_INF("Network service: %d", v);
 			minfo.mdm_service = v;
+			break;
+		case 6:
+			minfo.mdm_roaming = -1;
+			if (v == 1) {
+				minfo.mdm_roaming = 1;
+			} else if(v == 0) {
+				minfo.mdm_roaming = 0;
+			}
+			LOG_INF("Roaming: %d", v);
+			break;
+		case 11:
+			LOG_INF("Simcard status: %d", v);
+			minfo.mdm_simcard_status = v;
 			break;
 		}
 
@@ -429,8 +420,6 @@ static int gsm_poll_network_status(struct modem_context *ctx, struct k_sem *sem)
 		LOG_ERR("Querying CIND: %d", ret);
 		return ret;
 	}
-
-	ctx->data_rssi = minfo.mdm_rssi;
 
 	if (minfo.mdm_service != 1) {
 		return -EIO;
