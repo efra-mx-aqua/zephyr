@@ -38,12 +38,7 @@ LOG_MODULE_REGISTER(modem_gsm, CONFIG_MODEM_LOG_LEVEL);
 #define GSM_RSSI_RETRY_DELAY_MSEC       2000
 #define GSM_RSSI_RETRIES                10
 #define GSM_RSSI_INVALID                -1000
-
-#if defined(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI)
-	#define GSM_RSSI_MAXVAL          0
-#else
-	#define GSM_RSSI_MAXVAL         -51
-#endif
+#define GSM_RSSI_MAXVAL         	-51
 
 /* During the modem setup, we first create DLCI control channel and then
  * PPP and AT channels. Currently the modem does not create possible GNSS
@@ -93,8 +88,6 @@ K_KERNEL_STACK_DEFINE(gsm_rx_stack, GSM_RX_STACK_SIZE);
 struct k_thread gsm_rx_thread;
 static struct k_work_delayable rssi_work_handle;
 
-#if defined(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI)
-	/* helper macro to keep readability */
 #define ATOI(s_, value_, desc_) modem_atoi(s_, value_, desc_, __func__)
 
 /**
@@ -122,7 +115,6 @@ static int modem_atoi(const char *s, const int err_value,
 
 	return ret;
 }
-#endif
 
 static void gsm_rx(struct gsm_modem *gsm)
 {
@@ -375,22 +367,33 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_cesq)
 	rxlev = ATOI(argv[0], 0, "rxlev");
 
 	if (rsrp >= 0 && rsrp <= 97) {
-		gsm.context.data_rssi = -140 + (rsrp - 1);
-		LOG_INF("RSRP: %d", gsm.context.data_rssi);
-	} else if (rscp >= 0 && rscp <= 96) {
-		gsm.context.data_rssi = -120 + (rscp - 1);
-		LOG_INF("RSCP: %d", gsm.context.data_rssi);
-	} else if (rxlev >= 0 && rxlev <= 63) {
-		gsm.context.data_rssi = -110 + (rxlev - 1);
-		LOG_INF("RSSI: %d", gsm.context.data_rssi);
+		gsm.context.data_rsrp = -140 + (rsrp - 1);
+		LOG_INF("RSRP: %d", gsm.context.data_rsrp);
 	} else {
 		gsm.context.data_rssi = GSM_RSSI_INVALID;
-		LOG_INF("RSRP/RSCP/RSSI not known");
+		LOG_INF("RSRP not known");
+	}
+	if (rscp >= 0 && rscp <= 96) {
+		gsm.context.data_rscp = -120 + (rscp - 1);
+		LOG_INF("RSCP: %d", gsm.context.data_rscp);
+	} else {
+		gsm.context.data_rscp = GSM_RSSI_INVALID;
+		LOG_INF("RSCP not known");
+	}
+	if (rxlev >= 0 && rxlev <= 63) {
+		gsm.context.data_rssi = -110 + (rxlev - 1);
+		LOG_INF("RSSI: %d", gsm.context.data_rssi);
+	} else if (!IS_ENABLED(CONFIG_MODEM_GSM_ENABLE_CSQ_RSSI)) {
+		gsm.context.data_rssi = GSM_RSSI_INVALID;
+		LOG_INF("RSSI not known");
+	} else {
+		/* preserve the RSSI */
 	}
 
 	return 0;
 }
-#else
+#endif
+#if defined(CONFIG_MODEM_GSM_ENABLE_CSQ_RSSI)
 /* Handler: +CSQ: <signal_power>[0],<qual>[1] */
 MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_csq)
 {
@@ -398,14 +401,20 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_csq)
 	if (argc) {
 		int rssi = atoi(argv[0]);
 
-		if (rssi >= 0 && rssi <= 31) {
+		/* If  CESQ return a vlue, give a priority to that*/
+		if (rssi >= 0 && rssi <= 31 &&
+		    (!IS_ENABLED(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI) ||
+		     GSM_RSSI_INVALID == gsm.context.data_rssi)) {
 			rssi = -113 + (rssi * 2);
-		} else {
+		} else if (!IS_ENABLED(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI)){
+			gsm.context.data_rssi = rssi;
 			rssi = GSM_RSSI_INVALID;
+		} else {
+			/* preserve the RSSI */
 		}
 
 		gsm.context.data_rssi = rssi;
-		LOG_INF("RSSI: %d", rssi);
+		LOG_INF("RSSI(CSQ): %d", rssi);
 	}
 
 	k_sem_give(&gsm.sem_response);
@@ -415,10 +424,11 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_csq)
 #endif
 
 #if defined(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI)
-static const struct modem_cmd read_rssi_cmd =
+static const struct modem_cmd read_rssi_cesq_cmd =
 	MODEM_CMD("+CESQ:", on_cmd_atcmdinfo_rssi_cesq, 6U, ",");
-#else
-static const struct modem_cmd read_rssi_cmd =
+#endif
+#if defined(CONFIG_MODEM_GSM_ENABLE_CSQ_RSSI)
+static const struct modem_cmd read_rssi_csq_cmd =
 	MODEM_CMD("+CSQ:", on_cmd_atcmdinfo_rssi_csq, 2U, ",");
 #endif
 
@@ -563,16 +573,26 @@ static void rssi_handler(struct k_work *work)
 {
 	int ret;
 #if defined(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI)
-	ret = modem_cmd_send(&gsm.context.iface, &gsm.context.cmd_handler,
-		&read_rssi_cmd, 1, "AT+CESQ", &gsm.sem_response, GSM_CMD_SETUP_TIMEOUT);
-#else
-	ret = modem_cmd_send(&gsm.context.iface, &gsm.context.cmd_handler,
-		&read_rssi_cmd, 1, "AT+CSQ", &gsm.sem_response, GSM_CMD_SETUP_TIMEOUT);
+	ret = modem_cmd_send_nolock(&gsm.context.iface, &gsm.context.cmd_handler,
+		&read_rssi_cesq_cmd, 1, "AT+CESQ", &gsm.sem_response, GSM_CMD_SETUP_TIMEOUT);
+	if (ret < 0 && !IS_ENABLED(CONFIG_MODEM_GSM_ENABLE_CSQ_RSSI)) {
+		LOG_DBG("No answer to RSSI(CESQ) readout, %s", "ignoring...");
+	}
+#endif
+#if defined(CONFIG_MODEM_GSM_ENABLE_CSQ_RSSI)
+	ret = modem_cmd_send_nolock(&gsm.context.iface, &gsm.context.cmd_handler,
+		&read_rssi_csq_cmd, 1, "AT+CSQ", &gsm.sem_response, GSM_CMD_SETUP_TIMEOUT);
+	if (ret < 0 && !IS_ENABLED(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI)) {
+		LOG_DBG("No answer to RSSI(CSQ) readout, %s", "ignoring...");
+	}
 #endif
 
+#if defined(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI) && \
+    defined(CONFIG_MODEM_GSM_ENABLE_CSQ_RSSI)
 	if (ret < 0) {
 		LOG_DBG("No answer to RSSI readout, %s", "ignoring...");
 	}
+#endif
 
 #if defined(CONFIG_GSM_MUX)
 #if defined(CONFIG_MODEM_CELL_INFO)
@@ -714,6 +734,7 @@ attaching:
 
 	LOG_DBG("modem attach returned %d, %s", ret, "read RSSI");
 	gsm->rssi_retries = GSM_RSSI_RETRIES;
+	gsm->context.data_rssi = GSM_RSSI_INVALID;
 
  attached:
 

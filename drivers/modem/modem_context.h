@@ -74,6 +74,11 @@ struct modem_context {
 #if defined(CONFIG_MODEM_CACHE_OPERATOR)
 	int   data_cached_operator;
 #endif
+#if defined(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI)
+	int   data_rscp;
+	int   data_rsrp;
+	float data_rsrq;
+#endif
 	int   data_rssi;
 	bool  is_automatic_oper;
 	/* pin config */
