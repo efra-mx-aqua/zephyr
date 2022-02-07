@@ -560,11 +560,11 @@ int gsm_ppp_setup_hook(struct modem_context *ctx, struct k_sem *sem)
 }
 
 static const struct gpio_dt_spec pwr_on_pin =
-	GPIO_DT_SPEC_GET(DT_NODELABEL(modem_pwr_ctrl), mdm_power_gpios);
+	GPIO_DT_SPEC_GET(DT_NODELABEL(ublox_mdm), mdm_power_gpios);
 static const struct gpio_dt_spec reset_pin =
-	GPIO_DT_SPEC_GET(DT_NODELABEL(modem_pwr_ctrl), mdm_reset_gpios);
+	GPIO_DT_SPEC_GET(DT_NODELABEL(ublox_mdm), mdm_reset_gpios);
 static const struct gpio_dt_spec vint_pin =
-	GPIO_DT_SPEC_GET(DT_NODELABEL(modem_pwr_ctrl), mdm_vint_gpios);
+	GPIO_DT_SPEC_GET(DT_NODELABEL(ublox_mdm), mdm_vint_gpios);
 
 /*----------------------------------------------------------------------------*/
 /* Infrastructure for interrupt-based VINT checking */
