@@ -716,8 +716,7 @@ attaching:
 		 * attach_retries set, becomes 0 -> trigger full retry
 		 */
 		if (!gsm->attach_retries) {
-			gsm->attach_retries = CONFIG_MODEM_GSM_ATTACH_TIMEOUT *
-				MSEC_PER_SEC / GSM_ATTACH_RETRY_DELAY_MSEC;
+			gsm->attach_retries = gsm->context.attach_max_retries;
 		} else {
 			gsm->attach_retries--;
 		}
@@ -1190,6 +1189,8 @@ static int gsm_init(const struct device *dev)
 #endif	/* CONFIG_MODEM_SIM_NUMBERS */
 #endif	/* CONFIG_MODEM_SHELL */
 
+	gsm->context.attach_max_retries = CONFIG_MODEM_GSM_ATTACH_TIMEOUT *
+				MSEC_PER_SEC / GSM_ATTACH_RETRY_DELAY_MSEC;
 	gsm->context.is_automatic_oper = false;
 	gsm->gsm_data.rx_rb_buf = &gsm->gsm_rx_rb_buf[0];
 	gsm->gsm_data.rx_rb_buf_len = sizeof(gsm->gsm_rx_rb_buf);
