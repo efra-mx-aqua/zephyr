@@ -62,6 +62,7 @@ static struct gsm_modem {
 	struct modem_iface_uart_data gsm_data;
 	struct k_work_delayable gsm_configure_work;
 	char gsm_rx_rb_buf[PPP_MRU * 3];
+	k_tid_t gsm_rx_tid;
 
 	uint8_t *ppp_recv_buf;
 	size_t ppp_recv_buf_len;
@@ -1100,6 +1101,59 @@ void gsm_ppp_stop(const struct device *dev)
 	}
 }
 
+int gsm_ppp_detect(const struct device *dev)
+{
+	struct gsm_modem *gsm = dev->data;
+	int ret = -1;
+
+	/* Re-init underlying UART comms */
+	ret = modem_iface_uart_init_dev(&gsm->context.iface,
+					DEVICE_DT_GET(GSM_UART_NODE));
+	if (ret) {
+		LOG_ERR("modem_iface_uart_init returned %d", ret);
+		return ret;
+	}
+
+	LOG_DBG("Detecting  modem %p ...", gsm);
+
+	ret = modem_cmd_send_nolock(&gsm->context.iface,
+				    &gsm->context.cmd_handler,
+				    &response_cmds[0],
+				    ARRAY_SIZE(response_cmds),
+				    "AT", &gsm->sem_response,
+				    GSM_CMD_AT_TIMEOUT);
+	if (ret < 0) {
+		LOG_DBG("modem not found %d", ret);
+
+		return -ENODEV;
+	} else {
+		LOG_DBG("modem found");
+	}
+	return 0;
+}
+
+int gsm_ppp_finalize(const struct device *dev)
+{
+	struct gsm_modem *gsm = dev->data;
+	struct net_if *iface = gsm->iface;
+
+	LOG_DBG("Finalizing modem %p ...", gsm);
+	if (iface && gsm->attached) {
+		gsm_ppp_stop(dev);
+	}
+	net_if_l2(iface)->enable(iface, false);
+
+	modem_context_unregister(&gsm->context);
+
+	/* destroy the "gsm_rx" thread */
+	k_thread_abort(gsm->gsm_rx_tid);
+
+	uart_irq_rx_disable(DEVICE_DT_GET(GSM_UART_NODE));
+	uart_irq_tx_disable(DEVICE_DT_GET(GSM_UART_NODE));
+
+	return 0;
+}
+
 static int gsm_init(const struct device *dev)
 {
 	struct gsm_modem *gsm = dev->data;
@@ -1156,10 +1210,10 @@ static int gsm_init(const struct device *dev)
 	LOG_DBG("iface->read %p iface->write %p",
 		gsm->context.iface.read, gsm->context.iface.write);
 
-	k_thread_create(&gsm_rx_thread, gsm_rx_stack,
-			K_KERNEL_STACK_SIZEOF(gsm_rx_stack),
-			(k_thread_entry_t) gsm_rx,
-			gsm, NULL, NULL, K_PRIO_COOP(7), 0, K_NO_WAIT);
+	gsm->gsm_rx_tid = k_thread_create(&gsm_rx_thread, gsm_rx_stack,
+				K_KERNEL_STACK_SIZEOF(gsm_rx_stack),
+				(k_thread_entry_t) gsm_rx,
+				gsm, NULL, NULL, K_PRIO_COOP(7), 0, K_NO_WAIT);
 	k_thread_name_set(&gsm_rx_thread, "gsm_rx");
 
 	gsm->iface = ppp_net_if();

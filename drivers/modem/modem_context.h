@@ -143,6 +143,15 @@ struct modem_context *modem_context_from_iface_dev(const struct device *dev);
  */
 int modem_context_register(struct modem_context *ctx);
 
+/**
+ * @brief  Unregisters modem context.
+ *
+ * @param  *ctx: modem context to unregister.
+ *
+ * @retval 0 if ok, < 0 if error.
+ */
+int modem_context_unregister(struct modem_context *ctx);
+
 /* pin config functions */
 int modem_pin_read(struct modem_context *ctx, uint32_t pin);
 int modem_pin_write(struct modem_context *ctx, uint32_t pin, uint32_t value);

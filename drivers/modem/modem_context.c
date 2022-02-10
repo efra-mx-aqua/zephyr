@@ -130,3 +130,16 @@ int modem_context_register(struct modem_context *ctx)
 
 	return 0;
 }
+
+int modem_context_unregister(struct modem_context *ctx)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(contexts); i++) {
+		if (contexts[i] && contexts[i] == ctx) {
+			contexts[i] = NULL;
+		}
+	}
+
+	return 0;
+}
