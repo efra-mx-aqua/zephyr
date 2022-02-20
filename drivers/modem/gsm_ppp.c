@@ -1454,9 +1454,9 @@ static int gsm_init(const struct device *dev)
 			   K_PRIO_COOP(7), NULL);
 	k_thread_name_set(&gsm->workq.thread, "gsm_workq");
 
-#if defined(CONFIG_GSM_MUX)
-	k_work_init_delayable(&gsm->rssi_work_handle, rssi_handler);
-#endif
+	if (IS_ENABLED(CONFIG_GSM_MUX)) {
+		k_work_init_delayable(&gsm->rssi_work_handle, rssi_handler);
+	}
 
 	gsm->iface = ppp_net_if();
 	if (!gsm->iface) {
