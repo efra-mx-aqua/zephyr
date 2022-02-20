@@ -30,6 +30,10 @@ LOG_MODULE_REGISTER(modem_gsm, CONFIG_MODEM_LOG_LEVEL);
 #define GSM_CMD_READ_BUF                128
 #define GSM_CMD_AT_TIMEOUT              K_SECONDS(2)
 #define GSM_CMD_SETUP_TIMEOUT           K_SECONDS(6)
+/* GSM_CMD_LOCK_TIMEOUT should be longer than GSM_CMD_AT_TIMEOUT & GSM_CMD_SETUP_TIMEOUT,
+ * otherwise the gsm_ppp_stop might fail to lock tx.
+ */
+#define GSM_CMD_LOCK_TIMEOUT            K_SECONDS(10)
 #define GSM_RX_STACK_SIZE               CONFIG_MODEM_GSM_RX_STACK_SIZE
 #define GSM_WORKQ_STACK_SIZE            CONFIG_MODEM_GSM_WORKQ_STACK_SIZE
 #define GSM_RECV_MAX_BUF                30
@@ -1266,9 +1270,7 @@ void gsm_ppp_stop(const struct device *dev)
 		}
 	}
 
-	gsm->running = false;
-	if (modem_cmd_handler_tx_lock(&gsm->context.cmd_handler,
-				      K_SECONDS(10))) {
+	if (modem_cmd_handler_tx_lock(&gsm->context.cmd_handler, GSM_CMD_LOCK_TIMEOUT)) {
 		LOG_WRN("Failed locking modem cmds!");
 	}
 
@@ -1276,6 +1278,7 @@ void gsm_ppp_stop(const struct device *dev)
 		gsm->modem_off_cb(gsm->dev, gsm->user_data);
 	}
 
+	gsm->running = false;
 	gsm->attached = false;
 	gsm->net_state = GSM_NET_INIT;
 }
