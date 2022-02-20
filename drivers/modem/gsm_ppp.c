@@ -586,39 +586,60 @@ static void set_ppp_carrier_on(struct gsm_modem *gsm)
 }
 #endif
 
-static void rssi_handler(struct k_work *work)
+static void query_rssi(struct gsm_modem *gsm, bool lock)
 {
 	int ret;
 
-	if (IS_ENABLED(CONFIG_GSM_MUX) && gsm.mux_enabled) {
-
 #if defined(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI)
-		ret = modem_cmd_send_nolock(&gsm.context.iface, &gsm.context.cmd_handler,
-			&read_rssi_cesq_cmd, 1, "AT+CESQ", &gsm.sem_response, GSM_CMD_SETUP_TIMEOUT);
-		if (ret < 0 && !IS_ENABLED(CONFIG_MODEM_GSM_ENABLE_CSQ_RSSI)) {
-			LOG_DBG("No answer to RSSI(CESQ) readout, %s", "ignoring...");
-		}
+	ret = modem_cmd_send_ext(&gsm->context.iface, &gsm->context.cmd_handler, &read_rssi_cmd, 1,
+				 "AT+CESQ", &gsm->sem_response, GSM_CMD_SETUP_TIMEOUT,
+				 lock ? 0 : MODEM_NO_TX_LOCK);
+	if (ret < 0 && !IS_ENABLED(CONFIG_MODEM_GSM_ENABLE_CSQ_RSSI)) {
+		LOG_DBG("No answer to RSSI(CESQ) readout, %s", "ignoring...");
+	}
 #endif
 #if defined(CONFIG_MODEM_GSM_ENABLE_CSQ_RSSI)
-		ret = modem_cmd_send_nolock(&gsm.context.iface, &gsm.context.cmd_handler,
-			&read_rssi_csq_cmd, 1, "AT+CSQ", &gsm.sem_response, GSM_CMD_SETUP_TIMEOUT);
-		if (ret < 0 && !IS_ENABLED(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI)) {
-			LOG_DBG("No answer to RSSI(CSQ) readout, %s", "ignoring...");
-		}
+	ret = modem_cmd_send_ext(&gsm->context.iface, &gsm->context.cmd_handler, &read_rssi_cmd, 1,
+				 "AT+CSQ", &gsm->sem_response, GSM_CMD_SETUP_TIMEOUT,
+				 lock ? 0 : MODEM_NO_TX_LOCK);
+	ret = modem_cmd_send_nolock(&gsm.context.iface, &gsm.context.cmd_handler,
+		&read_rssi_csq_cmd, 1, "AT+CSQ", &gsm.sem_response, GSM_CMD_SETUP_TIMEOUT);
+	if (ret < 0 && !IS_ENABLED(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI)) {
+		LOG_DBG("No answer to RSSI(CSQ) readout, %s", "ignoring...");
+	}
 #endif
 
 #if defined(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI) && \
     defined(CONFIG_MODEM_GSM_ENABLE_CSQ_RSSI)
-		if (ret < 0) {
-			LOG_DBG("No answer to RSSI readout, %s", "ignoring...");
-		}
+	if (ret < 0) {
+		LOG_DBG("No answer to RSSI readout, %s", "ignoring...");
+	}
 #endif
 
+}
+
+static inline void query_rssi_lock(struct gsm_modem *gsm)
+{
+	query_rssi(gsm, true);
+}
+
+static inline void query_rssi_nolock(struct gsm_modem *gsm)
+{
+	query_rssi(gsm, false);
+}
+
+static void rssi_handler(struct k_work *work)
+{
+	struct k_work_delayable *dwork = k_work_delayable_from_work(work);
+	struct gsm_modem *gsm = CONTAINER_OF(dwork, struct gsm_modem, rssi_work_handle);
+
+	query_rssi_lock(gsm);
+
 #if defined(CONFIG_MODEM_CELL_INFO)
-		(void) gsm_query_cellinfo(&gsm);
+	(void)gsm_query_cellinfo(gsm);
 #endif
-		k_work_reschedule(&rssi_work_handle, K_SECONDS(CONFIG_MODEM_GSM_RSSI_POLLING_PERIOD));
-	}
+	(void)gsm_work_reschedule(&gsm->rssi_work_handle,
+				  K_SECONDS(CONFIG_MODEM_GSM_RSSI_POLLING_PERIOD));
 }
 
 int __weak gsm_ppp_setup_hook(struct modem_context *ctx, struct k_sem *sem)
@@ -770,7 +791,7 @@ attaching:
 
 	if (!IS_ENABLED(CONFIG_GSM_MUX)) {
 		/* Read connection quality (RSSI) before PPP carrier is ON */
-		rssi_handler(NULL);
+		query_rssi_nolock(gsm);
 
 		if (!(gsm->context.data_rssi && gsm->context.data_rssi != GSM_RSSI_INVALID &&
 			gsm->context.data_rssi < GSM_RSSI_MAXVAL)) {
