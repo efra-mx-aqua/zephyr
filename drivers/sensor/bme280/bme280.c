@@ -322,7 +322,28 @@ static int bme280_read_compensation(const struct device *dev)
 	return 0;
 }
 
-static int bme280_chip_init(const struct device *dev)
+int bme280_configure(const struct device *dev)
+{
+	struct bme280_data *data = (struct bme280_data *) dev->data;
+	int err;
+
+	if (data->chip_id == BME280_CHIP_ID) {
+		err = bme280_reg_write(dev, BME280_REG_CTRL_HUM,
+				       BME280_HUMIDITY_OVER);
+		if (err < 0) {
+			return err;
+		}
+	}
+
+	err = bme280_reg_write(dev, BME280_REG_CONFIG, BME280_CONFIG_VAL);
+	if (err < 0) {
+		return err;
+	}
+
+	return 0;
+}
+
+int bme280_chip_init(const struct device *dev)
 {
 	struct bme280_data *data = to_data(dev);
 	int err;
@@ -364,28 +385,18 @@ static int bme280_chip_init(const struct device *dev)
 		return err;
 	}
 
-	if (data->chip_id == BME280_CHIP_ID) {
-		err = bme280_reg_write(dev, BME280_REG_CTRL_HUM,
-				       BME280_HUMIDITY_OVER);
-		if (err < 0) {
-			LOG_DBG("CTRL_HUM write failed: %d", err);
-			return err;
-		}
-	}
-
-	err = bme280_reg_write(dev, BME280_REG_CTRL_MEAS,
-			       BME280_CTRL_MEAS_VAL);
+	err = bme280_configure(dev);
 	if (err < 0) {
 		LOG_DBG("CTRL_MEAS write failed: %d", err);
 		return err;
 	}
 
-	err = bme280_reg_write(dev, BME280_REG_CONFIG,
-			       BME280_CONFIG_VAL);
+	err = bme280_reg_write(dev, BME280_REG_CTRL_MEAS, BME280_CTRL_MEAS_VAL);
 	if (err < 0) {
 		LOG_DBG("CONFIG write failed: %d", err);
 		return err;
 	}
+
 	/* Wait for the sensor to be ready */
 	k_sleep(K_MSEC(1));
 
