@@ -39,6 +39,7 @@ LOG_MODULE_REGISTER(modem_gsm, CONFIG_MODEM_LOG_LEVEL);
 #define GSM_RECV_MAX_BUF                30
 #define GSM_RECV_BUF_SIZE               128
 #define GSM_ATTACH_RETRY_DELAY_MSEC     1000
+#define GSM_RETRY_DELAY                 K_SECONDS(1)
 #define GSM_REGISTER_DELAY_MSEC         1000
 #define GSM_RETRY_DELAY                 K_SECONDS(1)
 #define GSM_REGISTER_DELAY_MSEC         1000
@@ -126,8 +127,7 @@ static struct gsm_modem {
 	gsm_modem_power_cb modem_off_cb;
 } gsm;
 
-NET_BUF_POOL_DEFINE(gsm_recv_pool, GSM_RECV_MAX_BUF, GSM_RECV_BUF_SIZE,
-		    0, NULL);
+NET_BUF_POOL_DEFINE(gsm_recv_pool, GSM_RECV_MAX_BUF, GSM_RECV_BUF_SIZE, 0, NULL);
 K_KERNEL_STACK_DEFINE(gsm_rx_stack, GSM_RX_STACK_SIZE);
 K_THREAD_STACK_DEFINE(gsm_workq_stack, GSM_WORKQ_STACK_SIZE);
 
@@ -759,7 +759,7 @@ static void gsm_finalize_connection(struct k_work *work)
 					    GSM_CMD_AT_TIMEOUT);
 		if (ret < 0) {
 			LOG_ERR("%s returned %d, %s", "AT", ret, "retrying...");
-			(void)gsm_work_reschedule(&gsm->gsm_configure_work, K_SECONDS(1));
+			(void)gsm_work_reschedule(&gsm->gsm_configure_work, GSM_RETRY_DELAY);
 			return;
 		}
 	}
@@ -782,19 +782,20 @@ static void gsm_finalize_connection(struct k_work *work)
 						  GSM_CMD_SETUP_TIMEOUT);
 	if (ret < 0) {
 		LOG_DBG("%s returned %d, %s", "setup_cmds", ret, "retrying...");
-		(void)gsm_work_reschedule(&gsm->gsm_configure_work, K_SECONDS(1));
+		(void)gsm_work_reschedule(&gsm->gsm_configure_work, GSM_RETRY_DELAY);
 		return;
 	}
 
 	ret = gsm_query_modem_info(gsm);
 	if (ret < 0) {
 		LOG_DBG("Unable to query modem information %d", ret);
-		(void)gsm_work_reschedule(&gsm->gsm_configure_work, K_SECONDS(1));
+		(void)gsm_work_reschedule(&gsm->gsm_configure_work, GSM_RETRY_DELAY);
 		return;
 	}
 
 	ret = gsm_ppp_setup_hook(&gsm->context, &gsm->sem_response);
 	if (ret < 0) {
+		LOG_ERR("%s returned %d, %s", "gsm_setup_mccmno", ret, "retrying...");
 		(void)k_work_reschedule(&gsm->gsm_configure_work, K_SECONDS(5));
 		return;
 	}
@@ -923,7 +924,7 @@ attaching:
 						  GSM_CMD_SETUP_TIMEOUT);
 	if (ret < 0) {
 		LOG_DBG("%s returned %d, %s", "connect_cmds", ret, "retrying...");
-		(void)gsm_work_reschedule(&gsm->gsm_configure_work, K_SECONDS(1));
+		(void)gsm_work_reschedule(&gsm->gsm_configure_work, GSM_RETRY_DELAY);
 		return;
 	}
 
@@ -1243,6 +1244,8 @@ void gsm_ppp_stop(const struct device *dev)
 
 	if (!gsm->running) {
 		return;
+	}
+
 	(void)k_work_cancel_delayable_sync(&gsm->gsm_configure_work, &work_sync);
 	if (IS_ENABLED(CONFIG_GSM_MUX)) {
 		(void)k_work_cancel_delayable_sync(&gsm->rssi_work_handle, &work_sync);
