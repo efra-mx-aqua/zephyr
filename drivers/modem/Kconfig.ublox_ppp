@@ -57,6 +57,14 @@ config MODEM_GSM_UBANDMASK_NB1
          is a bitmask where bit 0 is band 1, etc.
          This is not meant to be upstreamed as-is!
 
+config MODEM_GSM_UBLOX_PWR_INIT_PRIORITY
+	int "Init priority for the GSM modem driver"
+	default 40
+	range 0 99
+	help
+	  The Ublox GSM modem is powered in POST_KERNEL using priority in
+	  the range 0-99.
+
 endif # MODEM_GSM_CONFIGURE_UBANDMASK
 
 endif # UBLOX_PPP_EXTENSIONS

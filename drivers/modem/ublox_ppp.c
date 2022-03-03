@@ -630,4 +630,7 @@ static int ublox_sara_r4_pwr_init(const struct device *dev)
 	return 0;
 }
 
-SYS_INIT(ublox_sara_r4_pwr_init, POST_KERNEL, 62);
+BUILD_ASSERT(CONFIG_MODEM_GSM_UBLOX_PWR_INIT_PRIORITY < CONFIG_MODEM_GSM_INIT_PRIORITY);
+
+SYS_INIT(ublox_sara_r4_pwr_init, POST_KERNEL,
+	 CONFIG_MODEM_GSM_UBLOX_PWR_INIT_PRIORITY);
