@@ -15,8 +15,7 @@ LOG_MODULE_DECLARE(modem_gsm, CONFIG_MODEM_LOG_LEVEL);
 
 #include "modem_cmd_handler.h"
 #include "modem_context.h"
-
-K_SEM_DEFINE(ublox_sem, 0, 1);
+#include "drivers/modem/ublox_sara_r4.h"
 
 #define MDM_URAT_LENGTH          16
 #define MDM_UBANDMASKS           2
@@ -35,6 +34,8 @@ struct modem_info {
 };
 
 static struct modem_info minfo;
+
+K_SEM_DEFINE(ublox_sem, 0, 1);
 
 /* Handler: +UMNOPROF: <mnoprof> */
 MODEM_CMD_DEFINE(on_cmd_atcmdinfo_mnoprof)
@@ -485,152 +486,3 @@ int gsm_ppp_setup_hook(struct modem_context *ctx, struct k_sem *sem)
 				    K_SECONDS(2));
 	return ret;
 }
-
-static const struct gpio_dt_spec pwr_on_pin =
-	GPIO_DT_SPEC_GET(DT_NODELABEL(ublox_mdm), mdm_power_gpios);
-static const struct gpio_dt_spec reset_pin =
-	GPIO_DT_SPEC_GET(DT_NODELABEL(ublox_mdm), mdm_reset_gpios);
-static const struct gpio_dt_spec vint_pin =
-	GPIO_DT_SPEC_GET(DT_NODELABEL(ublox_mdm), mdm_vint_gpios);
-
-/*----------------------------------------------------------------------------*/
-/* Infrastructure for interrupt-based VINT checking */
-/*----------------------------------------------------------------------------*/
-K_SEM_DEFINE(vint_sem, 0, 1);
-static void vint_handler(const struct device *port, struct gpio_callback *cb,
-			 gpio_port_pins_t pins)
-{
-	k_sem_give(&vint_sem);
-}
-/*----------------------------------------------------------------------------*/
-
-static struct gpio_callback vint_cb;
-static void enable_vint_isr(void)
-{
-	gpio_init_callback(&vint_cb, vint_handler, BIT(vint_pin.pin));
-	gpio_add_callback(vint_pin.port, &vint_cb);
-
-	k_sem_reset(&vint_sem);
-	gpio_pin_interrupt_configure_dt(&vint_pin, GPIO_INT_EDGE_BOTH);
-}
-
-static void disable_vint_isr(void)
-{
-	gpio_remove_callback(vint_pin.port, &vint_cb);
-	gpio_pin_interrupt_configure_dt(&vint_pin, GPIO_INT_DISABLE);
-}
-
-int ublox_sara_r4_pwr_on(void)
-{
-	int ret = 0;
-	if (gpio_pin_get_dt(&reset_pin) == 1) {
-		gpio_pin_set_dt(&reset_pin, 0);
-		k_sleep(K_SECONDS(3));
-	}
-
-	enable_vint_isr();
-	gpio_pin_set_dt(&pwr_on_pin, 0);
-	k_sleep(K_MSEC(200));
-	gpio_pin_set_dt(&pwr_on_pin, 1);
-	k_sleep(K_MSEC(200));
-
-	LOG_DBG("Waiting for VINT high...");
-	if (k_sem_take(&vint_sem, K_SECONDS(30))) {
-		LOG_ERR("VINT timeout!");
-		ret = -ETIMEDOUT;
-		goto end;
-	}
-
-	if (gpio_pin_get_dt(&vint_pin) != 1) {
-		LOG_ERR("VINT not high!!");
-		ret = -EIO;
-		goto end;
-	}
-
-	LOG_DBG("modem powered on");
-end:
-	disable_vint_isr();
-	return ret;
-}
-
-int ublox_sara_r4_pwr_off(void)
-{
-	int ret = 0;
-
-	if (gpio_pin_get_dt(&vint_pin) == 0) {
-		LOG_DBG("modem already powered off");
-		return 0;
-	}
-
-	enable_vint_isr();
-
-	/* Toggle power control pin */
-	gpio_pin_set_dt(&pwr_on_pin, 0);
-	k_sleep(K_MSEC(3000));
-	gpio_pin_set_dt(&pwr_on_pin, 1);
-
-	LOG_DBG("Waiting for VINT low...");
-	if (k_sem_take(&vint_sem, K_SECONDS(40))) {
-		LOG_ERR("VINT timeout!");
-		ret = -ETIMEDOUT;
-		goto end;
-	}
-
-	if (gpio_pin_get_dt(&vint_pin) != 0) {
-		LOG_ERR("VINT not low!!");
-		ret = -EIO;
-		goto end;
-	}
-
-	LOG_DBG("Powered off modem");
-end:
-	disable_vint_isr();
-	return ret;
-}
-
-int ublox_sara_r4_pwr_off_force(void)
-{
-	int ret = 0;
-	LOG_DBG("MODEM_RESET -> ACTIVE");
-
-	enable_vint_isr();
-	gpio_pin_set_dt(&reset_pin, 1);
-	if (k_sem_take(&vint_sem, K_SECONDS(10))) {
-		LOG_ERR("VINT low timeout!");
-		ret = -ETIMEDOUT;
-		goto end;
-	}
-
-	if (gpio_pin_get_dt(&vint_pin) != 0) {
-		LOG_ERR("VINT now low!!!");
-		ret = -EIO;
-		goto end;
-	}
-
-	LOG_DBG("vint is low!");
-	k_sleep(K_MSEC(500));
-end:
-	disable_vint_isr();
-	return ret;
-}
-
-static int ublox_sara_r4_pwr_init(const struct device *dev)
-{
-	ARG_UNUSED(dev);
-
-	gpio_pin_configure_dt(&reset_pin, GPIO_OUTPUT | GPIO_OUTPUT_INACTIVE);
-	gpio_pin_configure_dt(&pwr_on_pin, GPIO_OUTPUT);
-	gpio_pin_configure_dt(&vint_pin, GPIO_INPUT);
-
-	/* Make sure modem is powered off at boot for maximum determinism */
-	if (ublox_sara_r4_pwr_off()) {
-		ublox_sara_r4_pwr_off_force();
-	}
-
-	return 0;
-}
-
-BUILD_ASSERT(CONFIG_MODEM_GSM_UBLOX_PWR_INIT_PRIORITY < CONFIG_MODEM_GSM_INIT_PRIORITY);
-
-SYS_INIT(ublox_sara_r4_pwr_init, POST_KERNEL,
-	 CONFIG_MODEM_GSM_UBLOX_PWR_INIT_PRIORITY);

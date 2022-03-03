@@ -13,7 +13,11 @@ properties:
 
     mdm-power-gpios:
       type: phandle-array
-      required: true
+      required: false
+
+    mdm-pwr-on-gpios:
+      type: phandle-array
+      required: false
 
     mdm-reset-gpios:
       type: phandle-array
