@@ -114,9 +114,6 @@ static struct gsm_modem {
 	int rssi_retries;
 	int attach_retries;
 	int auto_cops_retries;
-	bool mux_enabled : 1;
-	bool mux_setup_done : 1;
-	bool setup_done : 1;
 	bool attached : 1;
 	bool running : 1;
 	bool modem_info_queried : 1;
@@ -941,8 +938,6 @@ attaching:
 		goto unlock;
 	}
 
-	gsm->setup_done = true;
-
 #ifdef CONFIG_NET_PPP
 	set_ppp_carrier_on(gsm);
 #endif
@@ -1170,7 +1165,6 @@ static void mux_setup(struct k_work *work)
 	goto unlock;
 fail:
 	gsm->state = STATE_INIT;
-	gsm->mux_enabled = false;
 unlock:
 	gsm_ppp_unlock(gsm);
 }
@@ -1207,7 +1201,6 @@ static void gsm_configure(struct k_work *work)
 		}
 
 		LOG_DBG("GSM muxing %s", "enabled");
-		gsm->mux_enabled = true;
 
 		gsm->state = STATE_INIT;
 
@@ -1276,7 +1269,6 @@ void gsm_ppp_stop(const struct device *dev)
 
 	if (IS_ENABLED(CONFIG_GSM_MUX)) {
 		/* Lower mux_enabled flag to trigger re-sending AT+CMUX etc */
-		gsm->mux_enabled = false;
 
 		if (gsm->ppp_dev) {
 			uart_mux_disable(gsm->ppp_dev);
