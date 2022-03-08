@@ -1140,12 +1140,17 @@ int gsm_ppp_finalize(const struct device *dev)
 	if (iface && gsm->attached) {
 		gsm_ppp_stop(dev);
 	}
-	net_if_l2(iface)->enable(iface, false);
+	if (iface) {
+		net_if_l2(iface)->enable(iface, false);
+	}
 
 	modem_context_unregister(&gsm->context);
 
 	/* destroy the "gsm_rx" thread */
-	k_thread_abort(gsm->gsm_rx_tid);
+	if (gsm->gsm_rx_tid) {
+		k_thread_abort(gsm->gsm_rx_tid);
+		gsm->gsm_rx_tid = 0;
+	}
 
 	uart_irq_rx_disable(DEVICE_DT_GET(GSM_UART_NODE));
 	uart_irq_tx_disable(DEVICE_DT_GET(GSM_UART_NODE));
