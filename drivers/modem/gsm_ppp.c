@@ -1228,6 +1228,10 @@ static int gsm_init(const struct device *dev)
 		return -ENODEV;
 	}
 
+	if (gsm_ppp_detect(dev) < 0) {
+		LOG_ERR("GSM ppp did not respond!!");
+		return -ENODEV;
+	}
 	if (IS_ENABLED(CONFIG_GSM_PPP_AUTOSTART)) {
 		gsm_ppp_start(dev);
 	}
