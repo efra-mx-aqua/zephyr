@@ -126,15 +126,14 @@ config MODEM_SHELL
 
 config MODEM_SIM_NUMBERS
 	bool "Enable querying the SIM for IMSI and ICCID"
-	depends on MODEM_SHELL
-	default y
+	default y if MODEM_SHELL
 	help
 	  Query the SIM card for the IMSI and ICCID identifiers. This
 	  can be disabled if the application does not use a SIM.
 
 config MODEM_CELL_INFO
 	bool "Enable querying for operator and cell info"
-	depends on MODEM_SHELL
+	default y if MODEM_SHELL
 	help
 	  Query for numerical operator id, location area code and cell id.
 
