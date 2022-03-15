@@ -79,10 +79,23 @@ static void setup_vint_isr(void)
 	v_int = -1;
 }
 
+static void pin_config(void)
+{
+#if DT_NODE_HAS_PROP(DT_NODELABEL(ublox_mdm), mdm_power_gpios)
+	gpio_pin_configure_dt(&modem_pins[MDM_POWER], GPIO_OUTPUT);
+#endif
+#if DT_NODE_HAS_PROP(DT_NODELABEL(ublox_mdm), mdm_pwr_on_gpios)
+	gpio_pin_configure_dt(&modem_pins[MDM_PWR_ON], GPIO_OUTPUT);
+#endif
+	gpio_pin_configure_dt(&modem_pins[MDM_RESET], GPIO_OUTPUT);
+	gpio_pin_configure_dt(&modem_pins[MDM_VINT], GPIO_INPUT);
+}
+
 /* Control the 'pwron' pin */
 static inline void pin_pwron_control(bool on)
 {
 	int assert_time;
+
 	/* Toggle power control pin */
 	gpio_pin_set_dt(&modem_pins[MDM_PWR_ON], 0);
 	LOG_DBG("MODEM_PWR_ON -> ASSERTED");
@@ -137,6 +150,8 @@ static inline int vint_wait(int status, k_timeout_t timeout) {
 int ublox_sara_r4_pwr_on(void)
 {
 	int ret = 0;
+
+	pin_config();
 	if (reset_asserted) {
 		pin_reset_control(0);
 		k_sleep(K_SECONDS(3));
@@ -157,6 +172,7 @@ int ublox_sara_r4_pwr_off(void)
 {
 	int ret = 0;
 
+	pin_config();
 	if (gpio_pin_get_dt(&modem_pins[MDM_VINT]) == 0) {
 		LOG_DBG("modem already powered off");
 		return 0;
@@ -177,6 +193,8 @@ int ublox_sara_r4_pwr_off(void)
 int ublox_sara_r4_pwr_off_force(void)
 {
 	int ret = -1;
+
+	pin_config();
 
 	pin_reset_control(1);
 
@@ -208,46 +226,13 @@ int ublox_sara_r4_pwr_wait(int on, k_timeout_t timeout)
 	return ret;
 }
 
-static int ublox_ppp_init(const struct device *dev)
-{
-	ARG_UNUSED(dev);
-
-#if DT_NODE_HAS_PROP(DT_NODELABEL(ublox_mdm), mdm_power_gpios)
-	gpio_pin_configure_dt(&modem_pins[MDM_POWER], GPIO_OUTPUT);
-#endif
-#if DT_NODE_HAS_PROP(DT_NODELABEL(ublox_mdm), mdm_pwr_on_gpios)
-	gpio_pin_configure_dt(&modem_pins[MDM_PWR_ON], GPIO_OUTPUT);
-#endif
-	gpio_pin_configure_dt(&modem_pins[MDM_RESET], GPIO_OUTPUT);
-	gpio_pin_configure_dt(&modem_pins[MDM_VINT], GPIO_INPUT);
-
-	/* Make sure modem is powered off at boot for maximum determinism */
-
-	setup_vint_isr();
-	enable_vint_isr();
-
-	if (ublox_sara_r4_pwr_off()) {
-		ublox_sara_r4_pwr_off_force();
-	}
-
-	return 0;
-}
-
 static int ublox_sara_r4_pwr_init(const struct device *dev)
 {
 	ARG_UNUSED(dev);
 
-#if DT_NODE_HAS_PROP(DT_NODELABEL(ublox_mdm), mdm_power_gpios)
-	gpio_pin_configure_dt(&modem_pins[MDM_POWER], GPIO_OUTPUT);
-#endif
-#if DT_NODE_HAS_PROP(DT_NODELABEL(ublox_mdm), mdm_pwr_on_gpios)
-	gpio_pin_configure_dt(&modem_pins[MDM_PWR_ON], GPIO_OUTPUT);
-#endif
-	gpio_pin_configure_dt(&modem_pins[MDM_RESET], GPIO_OUTPUT);
-	gpio_pin_configure_dt(&modem_pins[MDM_VINT], GPIO_INPUT);
-
 	/* Make sure modem is powered off at boot for maximum determinism */
 
+	pin_config();
 	setup_vint_isr();
 	enable_vint_isr();
 
@@ -262,5 +247,5 @@ static int ublox_sara_r4_pwr_init(const struct device *dev)
 	return 0;
 }
 
-SYS_INIT(ublox_sara_r4_pwr_init, PRE_KERNEL_2,
+SYS_INIT(ublox_sara_r4_pwr_init, POST_KERNEL,
 	 CONFIG_MODEM_GSM_UBLOX_PWR_INIT_PRIORITY);
