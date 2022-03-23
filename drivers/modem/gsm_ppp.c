@@ -34,6 +34,7 @@ LOG_MODULE_REGISTER(modem_gsm, CONFIG_MODEM_LOG_LEVEL);
 #define GSM_RECV_MAX_BUF                30
 #define GSM_RECV_BUF_SIZE               128
 #define GSM_ATTACH_RETRY_DELAY_MSEC     1000
+#define GSM_DETECTION_RETRIES           50
 
 #define GSM_RSSI_RETRY_DELAY_MSEC       2000
 #define GSM_RSSI_RETRIES                10
@@ -1100,6 +1101,7 @@ int gsm_ppp_detect(const struct device *dev)
 {
 	struct gsm_modem *gsm = dev->data;
 	int ret = -1;
+	int counter = 0;
 
 	/* Re-init underlying UART comms */
 	ret = modem_iface_uart_init_dev(&gsm->context.iface,
@@ -1111,15 +1113,21 @@ int gsm_ppp_detect(const struct device *dev)
 
 	LOG_DBG("Detecting  modem %p ...", gsm);
 
-	ret = modem_cmd_send_nolock(&gsm->context.iface,
-				    &gsm->context.cmd_handler,
-				    &response_cmds[0],
-				    ARRAY_SIZE(response_cmds),
-				    "AT", &gsm->sem_response,
-				    GSM_CMD_AT_TIMEOUT);
-	if (ret < 0) {
-		LOG_DBG("modem not found %d", ret);
+	while (counter++ < GSM_DETECTION_RETRIES && ret < 0) {
+		k_sleep(K_SECONDS(2));
+		ret = modem_cmd_send_nolock(&gsm->context.iface,
+					    &gsm->context.cmd_handler,
+					    &response_cmds[0],
+					    ARRAY_SIZE(response_cmds),
+					    "AT", &gsm->sem_response,
+					    GSM_CMD_AT_TIMEOUT);
+		if (ret < 0 && ret != -ETIMEDOUT) {
+			break;
+		}
+	}
 
+	if (ret < 0) {
+		LOG_ERR("MODEM WAIT LOOP ERROR: %d", ret);
 		return -ENODEV;
 	} else {
 		LOG_DBG("modem found");
