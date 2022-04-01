@@ -1227,11 +1227,19 @@ static int gsm_init(const struct device *dev)
 	gsm->iface = ppp_net_if();
 	if (!gsm->iface) {
 		LOG_ERR("Couldn't find ppp net_if!");
+		modem_context_unregister(&gsm->context);
+
 		return -ENODEV;
 	}
 
 	if (gsm_ppp_detect(dev) < 0) {
 		LOG_ERR("GSM ppp did not respond!!");
+		net_if_l2(gsm->iface)->enable(gsm->iface, false);
+		modem_context_unregister(&gsm->context);
+
+		/* the thread is not required any longer */
+		k_thread_abort(gsm->gsm_rx_tid);
+		gsm->gsm_rx_tid = 0;
 		return -ENODEV;
 	}
 	if (IS_ENABLED(CONFIG_GSM_PPP_AUTOSTART)) {
