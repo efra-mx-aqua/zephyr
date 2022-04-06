@@ -35,11 +35,13 @@ LOG_MODULE_REGISTER(modem_gsm, CONFIG_MODEM_LOG_LEVEL);
 #define GSM_RECV_BUF_SIZE               128
 #define GSM_ATTACH_RETRY_DELAY_MSEC     1000
 #define GSM_DETECTION_RETRIES           50
+#define GSM_AUTO_COPS_DELAY_MSEC     	5000
 
 #define GSM_RSSI_RETRY_DELAY_MSEC       2000
 #define GSM_RSSI_RETRIES                10
 #define GSM_RSSI_INVALID                -1000
 #define GSM_RSSI_MAXVAL         	-51
+
 
 /* During the modem setup, we first create DLCI control channel and then
  * PPP and AT channels. Currently the modem does not create possible GNSS
@@ -77,6 +79,7 @@ static struct gsm_modem {
 
 	int rssi_retries;
 	int attach_retries;
+	int auto_cops_retries;
 	bool mux_enabled : 1;
 	bool mux_setup_done : 1;
 	bool setup_done : 1;
@@ -486,43 +489,47 @@ static const struct setup_cmd connect_cmds[] = {
 static int gsm_setup_mccmno(struct gsm_modem *gsm)
 {
 	int ret = 0;
-	// FIXME: temporary hack
-	return 0;
+	uint16_t operator = 0;
+	static char manual_cops[1 + sizeof("AT+COPS=1,2,\"12345\"")];
 
+#if defined(CONFIG_MODEM_CACHE_OPERATOR)
+	if (!gsm->context.data_cached_operator) {
+		LOG_INF("No cached operator");
+	}
+	operator = (uint16_t)gsm->context.data_cached_operator;
+#endif
 	if (CONFIG_MODEM_GSM_MANUAL_MCCMNO[0]) {
+		operator = (uint16_t)strtol(CONFIG_MODEM_GSM_MANUAL_MCCMNO, NULL, 10);
+	}
+
+	/* If the operator is already known, we explicitly set the operator */
+	if (operator > 0) {
 		/* use manual MCC/MNO entry */
+		LOG_INF("Connecting to operator: %d", operator);
+		sprintf(manual_cops, "AT+COPS=1,2,%5u", operator);
 		ret = modem_cmd_send_nolock(&gsm->context.iface,
 					    &gsm->context.cmd_handler,
 					    NULL, 0,
-					    "AT+COPS=1,2,\""
-					    CONFIG_MODEM_GSM_MANUAL_MCCMNO
-					    "\"",
+					    manual_cops,
 					    &gsm->sem_response,
 					    GSM_CMD_AT_TIMEOUT);
 	} else {
 
-/* First AT+COPS? is sent to check if automatic selection for operator
- * is already enabled, if yes we do not send the command AT+COPS= 0,0.
- */
-
-		ret = modem_cmd_send_nolock(&gsm->context.iface,
-					    &gsm->context.cmd_handler,
-					    &read_cops_cmd,
-					    1, "AT+COPS?",
-					    &gsm->sem_response,
-					    GSM_CMD_SETUP_TIMEOUT);
-
+		ret = gsm_query_cellinfo(gsm);
 		if (ret < 0) {
 			return ret;
 		}
 
+		/* If the modem is configured to explicit operator,
+		 * we do send the command AT+COPS= 0,0.
+		*/
 		if (!gsm->context.is_automatic_oper) {
 			/* register operator automatically */
 			ret = modem_cmd_send_nolock(&gsm->context.iface,
 						    &gsm->context.cmd_handler,
 						    NULL, 0, "AT+COPS=0,0",
 						    &gsm->sem_response,
-						    GSM_CMD_AT_TIMEOUT);
+						    K_SECONDS(30));
 		}
 	}
 
@@ -626,6 +633,11 @@ static void gsm_finalize_connection(struct gsm_modem *gsm)
 		goto attaching;
 	}
 
+	/* If waiting for the mccmno, we should not redo every setup step */
+	if (gsm->auto_cops_retries) {
+		goto auto_cops;
+	}
+
 	if (IS_ENABLED(CONFIG_GSM_MUX) && gsm->mux_enabled) {
 		ret = modem_cmd_send_nolock(&gsm->context.iface,
 					    &gsm->context.cmd_handler,
@@ -652,17 +664,6 @@ static void gsm_finalize_connection(struct gsm_modem *gsm)
 		k_sleep(K_SECONDS(1));
 	}
 
-	ret = gsm_setup_mccmno(gsm);
-
-	if (ret < 0) {
-		LOG_ERR("modem setup returned %d, %s",
-				ret, "retrying...");
-
-		(void)k_work_reschedule(&gsm->gsm_configure_work,
-							K_SECONDS(1));
-		return;
-	}
-
 	ret = modem_cmd_handler_setup_cmds_nolock(&gsm->context.iface,
 						  &gsm->context.cmd_handler,
 						  setup_cmds,
@@ -681,6 +682,21 @@ static void gsm_finalize_connection(struct gsm_modem *gsm)
 		(void)k_work_reschedule(&gsm->gsm_configure_work, K_SECONDS(5));
 		return;
 	}
+
+auto_cops:
+	if (!gsm->auto_cops_retries) {
+		gsm->auto_cops_retries = gsm->context.auto_cops_max_retries;
+	} else {
+		gsm->auto_cops_retries--;
+	}
+	ret = gsm_setup_mccmno(gsm);
+	if (ret < 0) {
+		(void)k_work_reschedule(&gsm->gsm_configure_work,
+					K_MSEC(GSM_AUTO_COPS_DELAY_MSEC));
+		return;
+	}
+
+	gsm->auto_cops_retries = 0;
 
 	/* create PDP context */
 	ret = modem_cmd_send_nolock(&gsm->context.iface,
@@ -1197,6 +1213,8 @@ static int gsm_init(const struct device *dev)
 #endif	/* CONFIG_MODEM_SIM_NUMBERS */
 
 	gsm->context.attach_max_retries = CONFIG_MODEM_GSM_ATTACH_TIMEOUT *
+				MSEC_PER_SEC / GSM_ATTACH_RETRY_DELAY_MSEC;
+	gsm->context.auto_cops_max_retries = CONFIG_MODEM_GSM_AUTO_COPS_TIMEOUT *
 				MSEC_PER_SEC / GSM_ATTACH_RETRY_DELAY_MSEC;
 	gsm->context.is_automatic_oper = false;
 	gsm->gsm_data.rx_rb_buf = &gsm->gsm_rx_rb_buf[0];

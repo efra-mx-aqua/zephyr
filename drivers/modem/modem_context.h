@@ -67,9 +67,9 @@ struct modem_context {
 	char *data_iccid;
 #endif
 #if defined(CONFIG_MODEM_CELL_INFO)
-	int   data_operator;
-	int   data_lac;
-	int   data_cellid;
+	uint16_t data_operator;
+	int      data_lac;
+	int      data_cellid;
 #endif
 #if defined(CONFIG_MODEM_CACHE_OPERATOR)
 	int   data_cached_operator;
@@ -82,6 +82,7 @@ struct modem_context {
 	int   data_rssi;
 	bool  is_automatic_oper;
 	int attach_max_retries;
+	int auto_cops_max_retries;
 
 	/* pin config */
 	struct modem_pin *pins;

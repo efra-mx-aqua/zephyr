@@ -80,6 +80,14 @@ config MODEM_GSM_MANUAL_MCCMNO
 	  the network provider and may need to be changed if auto is not
 	  selected.
 
+config MODEM_GSM_AUTO_COPS_TIMEOUT
+	int "MCC/MNO for establishing network connection"
+	default 1080
+	help
+	  This setting is used to send AT+COPS? command until the network
+	  operator is received. This setting dictates how much time in
+	  seconds we give the modem before giving up.
+
 config MODEM_GSM_RSSI_POLLING_PERIOD
 	int "Configure RSSI polling period (in seconds)"
 	default 30

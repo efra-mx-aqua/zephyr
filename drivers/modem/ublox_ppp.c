@@ -438,8 +438,6 @@ int gsm_ppp_pre_connect_hook(struct modem_context *ctx, struct k_sem *sem)
 int gsm_ppp_setup_hook(struct modem_context *ctx, struct k_sem *sem)
 {
 	int ret;
-	static char manual_cops[1 + sizeof("AT+COPS=1,2,\"12345\"")];
-	int operator;
 
 	ret = gsm_setup_mnoprof(ctx, sem);
 	if (ret < 0) {
@@ -465,24 +463,5 @@ int gsm_ppp_setup_hook(struct modem_context *ctx, struct k_sem *sem)
 		return ret;
 	}
 
-#if defined(CONFIG_MODEM_CACHE_OPERATOR)
-	if (!ctx->data_cached_operator) {
-		LOG_INF("No cached operator");
-		return ret;
-	}
-	operator = ctx->data_cached_operator;
-#else
-	operator = ctx->data_operator;
-#endif
-	sprintf(manual_cops, "AT+COPS=1,2,%d", operator);
-	LOG_INF("Manual operator cmd: %s", log_strdup(manual_cops));
-
-	/* Best effort basis ie don't signal failure if this fails */
-	(void)modem_cmd_send_nolock(&ctx->iface,
-				    &ctx->cmd_handler,
-				    NULL, 0,
-				    manual_cops,
-				    sem,
-				    K_SECONDS(2));
 	return ret;
 }
