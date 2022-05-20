@@ -76,7 +76,7 @@ static void setup_vint_isr(void)
 {
 	gpio_init_callback(&vint_cb, vint_handler, BIT(modem_pins[MDM_VINT].pin));
 	gpio_add_callback(modem_pins[MDM_VINT].port, &vint_cb);
-	v_int = -1;
+	v_int = gpio_pin_get_dt(&modem_pins[MDM_VINT]);
 }
 
 static void pin_config(void)
@@ -152,6 +152,10 @@ int ublox_sara_r4_pwr_on(void)
 	int ret = 0;
 
 	pin_config();
+	if (gpio_pin_get_dt(&modem_pins[MDM_VINT]) == 1) {
+		LOG_DBG("modem already powered ON");
+		return 0;
+	}
 	if (reset_asserted) {
 		pin_reset_control(0);
 		k_sleep(K_SECONDS(3));
@@ -160,8 +164,8 @@ int ublox_sara_r4_pwr_on(void)
 	pin_pwron_control(1);
 
 	ret = vint_wait(1, K_SECONDS(30));
-	if (!ret) {
-		LOG_DBG("vint is not high!");
+	if (ret) {
+		LOG_DBG("V_INT is not high!");
 		k_sleep(K_MSEC(500));
 	}
 
@@ -174,7 +178,7 @@ int ublox_sara_r4_pwr_off(void)
 
 	pin_config();
 	if (gpio_pin_get_dt(&modem_pins[MDM_VINT]) == 0) {
-		LOG_DBG("modem already powered off");
+		LOG_DBG("modem already powered OFF");
 		return 0;
 	}
 
@@ -182,8 +186,8 @@ int ublox_sara_r4_pwr_off(void)
 
 	pin_pwron_control(0);
 	ret = vint_wait(0, K_SECONDS(30));
-	if (!ret) {
-		LOG_DBG("vint is not low!");
+	if (ret) {
+		LOG_DBG("v_int is not low!");
 		k_sleep(K_MSEC(500));
 	}
 
@@ -202,7 +206,7 @@ int ublox_sara_r4_pwr_off_force(void)
 	k_sleep(K_MSEC(500));
 	pin_pwron_control(0);
 	ret = vint_wait(0, K_SECONDS(30));
-	if (!ret) {
+	if (ret) {
 		LOG_DBG("vint is not low!");
 		k_sleep(K_MSEC(500));
 	}
