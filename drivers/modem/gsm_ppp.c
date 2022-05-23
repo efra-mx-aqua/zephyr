@@ -170,25 +170,24 @@ static int unquoted_atoi(const char *s, int base)
  */
 MODEM_CMD_DEFINE(on_cmd_atcmdinfo_cops)
 {
+	uint16_t operator;
 	if (argc >= 3) {
-#if defined(CONFIG_MODEM_CELL_INFO)
-		gsm.context.data_operator = unquoted_atoi(argv[2], 10);
-		LOG_INF("operator: %u",
-			gsm.context.data_operator);
-#endif
-#if defined(CONFIG_MODEM_CACHE_OPERATOR)
-		/* Fail-safe against operator format being wrong */
-		if (gsm.context.data_operator) {
-			gsm.context.data_cached_operator =
-				gsm.context.data_operator;
-		}
+		operator = unquoted_atoi(argv[2], 10);
+		LOG_INF("operator: %u", operator);
+		gsm.context.data_operator = operator;
 
-#endif
 		if (unquoted_atoi(argv[0], 10) == 0) {
 			gsm.context.is_automatic_oper = true;
 		} else {
 			gsm.context.is_automatic_oper = false;
 		}
+
+#if defined(CONFIG_MODEM_CACHE_OPERATOR)
+		/* Fail-safe against operator format being wrong */
+		if (operator) {
+			gsm.context.data_cached_operator = operator;
+		}
+#endif
 	}
 
 	return 0;
@@ -314,8 +313,6 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_iccid)
 }
 #endif /* CONFIG_MODEM_SIM_NUMBERS */
 
-#if defined(CONFIG_MODEM_CELL_INFO)
-
 /*
  * Handler: +CEREG: <n>[0],<stat>[1],<tac>[2],<ci>[3],<AcT>[4]
  */
@@ -355,7 +352,6 @@ static int gsm_query_cellinfo(struct gsm_modem *gsm)
 
 	return ret;
 }
-#endif /* CONFIG_MODEM_CELL_INFO */
 
 #if defined(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI)
 /*
@@ -473,10 +469,6 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_attached)
 	return 0;
 }
 
-
-static const struct modem_cmd read_cops_cmd =
-	// FIXME: temporary hack... or is it?
-	MODEM_CMD("+COPS", on_cmd_atcmdinfo_cops, 1U, ",");
 
 static const struct modem_cmd check_attached_cmd =
 	MODEM_CMD("+CGATT:", on_cmd_atcmdinfo_attached, 1U, ",");
