@@ -319,9 +319,11 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_iccid)
 MODEM_CMD_DEFINE(on_cmd_atcmdinfo_cereg)
 {
 	if (argc >= 4) {
+		gsm.context.data_eps_reg = unquoted_atoi(argv[1], 16);
 		gsm.context.data_lac = unquoted_atoi(argv[2], 16);
 		gsm.context.data_cellid = unquoted_atoi(argv[3], 16);
-		LOG_INF("lac: %u, cellid: %u",
+		LOG_INF("eps_reg: %u lac: %u, cellid: %u",
+			gsm.context.data_eps_reg,
 			gsm.context.data_lac,
 			gsm.context.data_cellid);
 	}

@@ -68,6 +68,7 @@ struct modem_context {
 #endif
 #if defined(CONFIG_MODEM_CELL_INFO)
 	uint16_t data_operator;
+	int      data_eps_reg;
 	int      data_lac;
 	int      data_cellid;
 #endif
