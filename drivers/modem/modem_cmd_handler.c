@@ -554,9 +554,6 @@ int modem_cmd_handler_setup_cmds(struct modem_iface *iface,
 	int ret = 0, i;
 
 	for (i = 0; i < cmds_len; i++) {
-		if (i) {
-			k_sleep(K_MSEC(50));
-		}
 
 		if (cmds[i].handle_cmd.cmd && cmds[i].handle_cmd.func) {
 			ret = modem_cmd_send(iface, handler,
@@ -568,6 +565,8 @@ int modem_cmd_handler_setup_cmds(struct modem_iface *iface,
 					     NULL, 0, cmds[i].send_cmd,
 					     sem, timeout);
 		}
+
+		k_sleep(K_MSEC(50));
 
 		if (ret < 0) {
 			LOG_ERR("command %s ret:%d",
@@ -593,9 +592,7 @@ int modem_cmd_handler_setup_cmds_nolock(struct modem_iface *iface,
 			continue;
 		}
 
-		if (i) {
-			k_sleep(K_MSEC(50));
-		}
+		k_sleep(K_MSEC(50));
 
 		if (cmds[i].handle_cmd.cmd && cmds[i].handle_cmd.func) {
 			ret = modem_cmd_send_nolock(iface, handler,
@@ -607,6 +604,8 @@ int modem_cmd_handler_setup_cmds_nolock(struct modem_iface *iface,
 						    NULL, 0, cmds[i].send_cmd,
 						    sem, timeout);
 		}
+
+		k_sleep(K_MSEC(50));
 
 		if (ret < 0) {
 			LOG_ERR("command %s ret:%d",
