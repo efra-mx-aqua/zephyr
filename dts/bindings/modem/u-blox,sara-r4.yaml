@@ -26,3 +26,8 @@ properties:
     mdm-vint-gpios:
       type: phandle-array
       required: false
+
+    mdm-dtr-gpios:
+      type: phandle-array
+      required: false
+

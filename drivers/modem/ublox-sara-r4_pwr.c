@@ -25,6 +25,7 @@ enum mdm_control_pins {
 #endif
 	MDM_RESET,
 	MDM_VINT,
+	MDM_DTR,
 };
 
 static const struct gpio_dt_spec modem_pins[] = {
@@ -43,6 +44,9 @@ static const struct gpio_dt_spec modem_pins[] = {
 
 	/* MDM_VINT */
 	GPIO_DT_SPEC_GET(DT_NODELABEL(ublox_mdm), mdm_vint_gpios),
+
+	/* MDM_DTR */
+	GPIO_DT_SPEC_GET(DT_NODELABEL(ublox_mdm), mdm_dtr_gpios),
 };
 
 
@@ -63,7 +67,7 @@ static void vint_handler(const struct device *port, struct gpio_callback *cb,
 			 gpio_port_pins_t pins)
 {
 	v_int = gpio_pin_get_dt(&modem_pins[MDM_VINT]);
-	LOG_DBG("V_INT = %d", v_int);
+	LOG_DBG("vint handler: V_INT = %d", v_int);
 }
 /*----------------------------------------------------------------------------*/
 
@@ -74,6 +78,11 @@ static void enable_vint_isr(void)
 
 static void setup_vint_isr(void)
 {
+	if (!device_is_ready(modem_pins[MDM_VINT].port)) {
+		LOG_ERR("device %s is not ready",
+			modem_pins[MDM_VINT].port->name);
+		return -ENODEV;
+	}
 	gpio_init_callback(&vint_cb, vint_handler, BIT(modem_pins[MDM_VINT].pin));
 	gpio_add_callback(modem_pins[MDM_VINT].port, &vint_cb);
 	v_int = gpio_pin_get_dt(&modem_pins[MDM_VINT]);
@@ -89,6 +98,7 @@ static void pin_config(void)
 #endif
 	gpio_pin_configure_dt(&modem_pins[MDM_RESET], GPIO_OUTPUT);
 	gpio_pin_configure_dt(&modem_pins[MDM_VINT], GPIO_INPUT);
+	gpio_pin_configure_dt(&modem_pins[MDM_DTR], GPIO_OUTPUT | GPIO_PULL_DOWN);
 }
 
 /* Control the 'pwron' pin */
@@ -151,7 +161,6 @@ int ublox_sara_r4_pwr_on(void)
 {
 	int ret = 0;
 
-	pin_config();
 	if (gpio_pin_get_dt(&modem_pins[MDM_VINT]) == 1) {
 		LOG_DBG("modem already powered ON");
 		return 0;
@@ -176,13 +185,10 @@ int ublox_sara_r4_pwr_off(void)
 {
 	int ret = 0;
 
-	pin_config();
 	if (gpio_pin_get_dt(&modem_pins[MDM_VINT]) == 0) {
 		LOG_DBG("modem already powered OFF");
 		return 0;
 	}
-
-	pin_reset_control(1);
 
 	pin_pwron_control(0);
 	ret = vint_wait(0, K_SECONDS(30));
@@ -191,14 +197,14 @@ int ublox_sara_r4_pwr_off(void)
 		k_sleep(K_MSEC(500));
 	}
 
+	pin_reset_control(1);
+	
 	return ret;
 }
 
 int ublox_sara_r4_pwr_off_force(void)
 {
 	int ret = -1;
-
-	pin_config();
 
 	pin_reset_control(1);
 
@@ -237,6 +243,7 @@ static int ublox_sara_r4_pwr_init(const struct device *dev)
 	/* Make sure modem is powered off at boot for maximum determinism */
 
 	pin_config();
+
 	setup_vint_isr();
 	enable_vint_isr();
 
