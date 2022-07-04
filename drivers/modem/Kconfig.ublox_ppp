@@ -21,6 +21,20 @@ config MODEM_GSM_CONFIGURE_URAT
        help
          Choose this setting to select the Radio Access Technologies used.
 
+config MODEM_GSM_CONFIGURE_URAT1
+       bool "Enable support for selecting RATs"
+       default y
+       depends on MODEM_GSM_CONFIGURE_URAT
+       help
+         Choose this setting to select the Radio Access Technologies used.
+
+config MODEM_GSM_CONFIGURE_URAT2
+       bool "Enable support for selecting RATs"
+       default n
+       depends on MODEM_GSM_CONFIGURE_URAT && MODEM_GSM_CONFIGURE_URAT1
+       help
+         Choose this setting to select the Radio Access Technologies used.
+
 if MODEM_GSM_CONFIGURE_URAT
 
 config MODEM_GSM_URAT
@@ -29,7 +43,27 @@ config MODEM_GSM_URAT
        help
          This setting is used to change the RATs that the modem will use
          to connect to the network
+         (legacy, use MODEM_GSM_URAT1, MODEM_GSM_URAT2 and/or MODEM_GSM_URAT3)
+
+config MODEM_GSM_URAT1
+       int "Radio Access Technology (RAT) 1"
+       default 8
+       depends on MODEM_GSM_CONFIGURE_URAT1
+       help
+         This setting is used to change the RAT 1 that the modem will use
+         to connect to the network.
          This is not meant to be upstreamed as-is!
+	 (3: LTE, 7: LTE Cat M1, 8: LTE Cat NB1, 9: GPRS / eGPRS)
+
+config MODEM_GSM_URAT2
+       int "Radio Access Technology (RAT) 2"
+       default 8
+       depends on MODEM_GSM_CONFIGURE_URAT2
+       help
+         This setting is used to change the RAT 2 that the modem will use
+         to connect to the network.
+         This is not meant to be upstreamed as-is!
+	 (3: LTE, 7: LTE Cat M1, 8: LTE Cat NB1, 9: GPRS / eGPRS)
 
 endif # MODEM_GSM_CONFIGURE_URAT
 
@@ -41,8 +75,8 @@ config MODEM_GSM_CONFIGURE_UBANDMASK
 
 if MODEM_GSM_CONFIGURE_UBANDMASK
 
-config MODEM_GSM_UBANDMASK_M1
-       int "Bandmask for LTE-M1"
+config MODEM_GSM_UBANDMASK_LTE_CAT_M1
+       int "Bandmask for LTE-Cat-M1"
        default 526494
        help
          This setting is used to change the band mask for LTE-M1. It

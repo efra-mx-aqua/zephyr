@@ -82,8 +82,9 @@ struct modem_context {
 #endif
 	int   data_rssi;
 	bool  is_automatic_oper;
-	int attach_max_retries;
-	int auto_cops_max_retries;
+	int   attach_max_retries;
+	int   auto_cops_max_retries;
+	bool  req_reset;
 
 	/* pin config */
 	struct modem_pin *pins;
