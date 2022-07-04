@@ -25,7 +25,9 @@ enum mdm_control_pins {
 #endif
 	MDM_RESET,
 	MDM_VINT,
+#if DT_NODE_HAS_PROP(DT_NODELABEL(ublox_mdm), mdm_dtr_gpios)
 	MDM_DTR,
+#endif
 };
 
 static const struct gpio_dt_spec modem_pins[] = {
@@ -45,8 +47,10 @@ static const struct gpio_dt_spec modem_pins[] = {
 	/* MDM_VINT */
 	GPIO_DT_SPEC_GET(DT_NODELABEL(ublox_mdm), mdm_vint_gpios),
 
+#if DT_NODE_HAS_PROP(DT_NODELABEL(ublox_mdm), mdm_dtr_gpios)
 	/* MDM_DTR */
 	GPIO_DT_SPEC_GET(DT_NODELABEL(ublox_mdm), mdm_dtr_gpios),
+#endif
 };
 
 
@@ -78,11 +82,8 @@ static void enable_vint_isr(void)
 
 static void setup_vint_isr(void)
 {
-	if (!device_is_ready(modem_pins[MDM_VINT].port)) {
-		LOG_ERR("device %s is not ready",
-			modem_pins[MDM_VINT].port->name);
-		return -ENODEV;
-	}
+	__ASSERT_NO_MSG(modem_pins[MDM_VINT].port);
+
 	gpio_init_callback(&vint_cb, vint_handler, BIT(modem_pins[MDM_VINT].pin));
 	gpio_add_callback(modem_pins[MDM_VINT].port, &vint_cb);
 	v_int = gpio_pin_get_dt(&modem_pins[MDM_VINT]);
@@ -98,7 +99,9 @@ static void pin_config(void)
 #endif
 	gpio_pin_configure_dt(&modem_pins[MDM_RESET], GPIO_OUTPUT);
 	gpio_pin_configure_dt(&modem_pins[MDM_VINT], GPIO_INPUT);
-	gpio_pin_configure_dt(&modem_pins[MDM_DTR], GPIO_OUTPUT | GPIO_PULL_DOWN);
+#if DT_NODE_HAS_PROP(DT_NODELABEL(ublox_mdm), mdm_dtr_gpios)
+	gpio_pin_configure_dt(&modem_pins[MDM_DTR], GPIO_OUTPUT);
+#endif
 }
 
 /* Control the 'pwron' pin */
@@ -198,7 +201,7 @@ int ublox_sara_r4_pwr_off(void)
 	}
 
 	pin_reset_control(1);
-	
+
 	return ret;
 }
 
