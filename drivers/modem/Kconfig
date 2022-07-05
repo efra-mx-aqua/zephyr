@@ -144,6 +144,7 @@ config MODEM_CACHE_OPERATOR
 	  Cache numerical operator id.
 
 source "drivers/modem/Kconfig.ublox_ppp"
+source "drivers/modem/Kconfig.ublox_pwr"
 source "drivers/modem/Kconfig.ublox-sara-r4"
 source "drivers/modem/Kconfig.quectel-bg9x"
 source "drivers/modem/Kconfig.wncm14a2a"

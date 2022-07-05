@@ -5,7 +5,7 @@
  */
 
 #include <logging/log.h>
-LOG_MODULE_DECLARE(modem_gsm, CONFIG_MODEM_LOG_LEVEL);
+LOG_MODULE_REGISTER(modem_sara_r4_pwr, CONFIG_MODEM_LOG_LEVEL);
 
 #include <zephyr.h>
 #include <stdlib.h>
@@ -253,7 +253,6 @@ static int ublox_sara_r4_pwr_init(const struct device *dev)
 	if (ublox_sara_r4_pwr_off()) {
 		ublox_sara_r4_pwr_off_force();
 	}
-
 	if (IS_ENABLED(CONFIG_GSM_PPP_AUTOSTART)) {
 		ublox_sara_r4_pwr_on();
 	}
@@ -261,10 +260,12 @@ static int ublox_sara_r4_pwr_init(const struct device *dev)
 	return 0;
 }
 
-BUILD_ASSERT(CONFIG_MODEM_GSM_UBLOX_PWR_INIT_PRIORITY >
+BUILD_ASSERT(CONFIG_MODEM_UBLOX_PWR_INIT_PRIORITY >
 	     CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
-BUILD_ASSERT(CONFIG_MODEM_GSM_UBLOX_PWR_INIT_PRIORITY <
+#if CONFIG_MODEM_GSM_INIT_PRIORITY
+BUILD_ASSERT(CONFIG_MODEM_UBLOX_PWR_INIT_PRIORITY <
 	     CONFIG_MODEM_GSM_INIT_PRIORITY);
+#endif
 
 SYS_INIT(ublox_sara_r4_pwr_init, POST_KERNEL,
-	 CONFIG_MODEM_GSM_UBLOX_PWR_INIT_PRIORITY);
+	 CONFIG_MODEM_UBLOX_PWR_INIT_PRIORITY);

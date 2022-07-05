@@ -13,14 +13,12 @@ zephyr_library_sources_ifdef(CONFIG_MODEM_CONTEXT
 zephyr_library_sources_ifdef(CONFIG_MODEM_IFACE_UART modem_iface_uart.c)
 zephyr_library_sources_ifdef(CONFIG_MODEM_CMD_HANDLER modem_cmd_handler.c)
 zephyr_library_sources_ifdef(CONFIG_MODEM_SOCKET modem_socket.c)
-zephyr_library_sources_ifdef(CONFIG_UBLOX_PPP_EXTENSIONS
-  ublox_ppp.c
-  ublox-sara-r4_pwr.c
-)
 
 if(CONFIG_MODEM_UBLOX_SARA)
 	zephyr_library_include_directories(${ZEPHYR_BASE}/subsys/net/ip)
 	zephyr_library_sources(ublox-sara-r4.c)
+elseif(CONFIG_MODEM_UBLOX_PWR)
+	zephyr_library_sources(ublox-sara-r4_pwr.c)
 endif()
 
 if(CONFIG_MODEM_QUECTEL_BG9X)
@@ -36,6 +34,10 @@ endif()
 if(CONFIG_MODEM_GSM_PPP)
 	zephyr_library_include_directories(${ZEPHYR_BASE}/subsys/net/ip)
 	zephyr_library_sources(gsm_ppp.c)
+endif()
+
+if(CONFIG_UBLOX_PPP_EXTENSIONS)
+	zephyr_library_sources(ublox_ppp.c)
 endif()
 
 if (CONFIG_MODEM_HL7800)
