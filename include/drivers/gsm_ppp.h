@@ -11,6 +11,7 @@
 struct device;
 void gsm_ppp_start(const struct device *dev);
 void gsm_ppp_stop(const struct device *dev);
+bool gsm_ppp_is_running(const struct device *dev);
 
 int gsm_ppp_detect(const struct device *dev);
 int gsm_ppp_finalize(const struct device *dev);

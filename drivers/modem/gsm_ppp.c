@@ -84,6 +84,7 @@ static struct gsm_modem {
 	bool mux_setup_done : 1;
 	bool setup_done : 1;
 	bool attached : 1;
+	bool running : 1;
 } gsm;
 
 NET_BUF_POOL_DEFINE(gsm_recv_pool, GSM_RECV_MAX_BUF, GSM_RECV_BUF_SIZE,
@@ -1070,6 +1071,10 @@ void gsm_ppp_start(const struct device *dev)
 {
 	struct gsm_modem *gsm = dev->data;
 
+	if (gsm->running) {
+		return;
+	}
+
 	/* Re-init underlying UART comms */
 	int r = modem_iface_uart_init_dev(&gsm->context.iface,
 				DEVICE_DT_GET(GSM_UART_NODE));
@@ -1084,12 +1089,17 @@ void gsm_ppp_start(const struct device *dev)
 #if defined(CONFIG_GSM_MUX)
 	k_work_init_delayable(&rssi_work_handle, rssi_handler);
 #endif
+	gsm->running = true;
 }
 
 void gsm_ppp_stop(const struct device *dev)
 {
 	struct gsm_modem *gsm = dev->data;
 	struct net_if *iface = gsm->iface;
+
+	if (!gsm->running) {
+		return;
+	}
 
 	net_if_l2(iface)->enable(iface, false);
 
@@ -1106,6 +1116,14 @@ void gsm_ppp_stop(const struct device *dev)
 				      K_SECONDS(10))) {
 		LOG_WRN("Failed locking modem cmds!");
 	}
+}
+
+bool gsm_ppp_is_running(const struct device *dev)
+{
+	struct gsm_modem *gsm = dev->data;
+
+	return gsm->running;
+
 }
 
 int gsm_ppp_detect(const struct device *dev)
