@@ -1104,6 +1104,8 @@ void gsm_ppp_stop(const struct device *dev)
 	net_if_l2(iface)->enable(iface, false);
 
 	if (IS_ENABLED(CONFIG_GSM_MUX)) {
+		/* Cancel any pending RSSI work */
+		k_work_cancel_delayable(&rssi_work_handle);
 		/* Lower mux_enabled flag to trigger re-sending AT+CMUX etc */
 		gsm->mux_enabled = false;
 
