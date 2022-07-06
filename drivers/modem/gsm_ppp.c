@@ -42,6 +42,11 @@ LOG_MODULE_REGISTER(modem_gsm, CONFIG_MODEM_LOG_LEVEL);
 #define GSM_RSSI_INVALID                -1000
 #define GSM_RSSI_MAXVAL         	-51
 
+#ifdef CONFIG_NET_PPP
+#define GSM_RX_RINGBUF_SIZE             (PPP_MRU * 3)
+#else
+#define GSM_RX_RINGBUF_SIZE             1500
+#endif
 
 /* During the modem setup, we first create DLCI control channel and then
  * PPP and AT channels. Currently the modem does not create possible GNSS
@@ -64,7 +69,7 @@ static struct gsm_modem {
 
 	struct modem_iface_uart_data gsm_data;
 	struct k_work_delayable gsm_configure_work;
-	char gsm_rx_rb_buf[PPP_MRU * 3];
+	char gsm_rx_rb_buf[GSM_RX_RINGBUF_SIZE];
 	k_tid_t gsm_rx_tid;
 
 	uint8_t *ppp_recv_buf;
@@ -535,6 +540,7 @@ static int gsm_setup_mccmno(struct gsm_modem *gsm)
 	return ret;
 }
 
+#ifdef CONFIG_NET_PPP
 static struct net_if *ppp_net_if(void)
 {
 	return net_if_get_first_by_type(&NET_L2_GET_NAME(PPP));
@@ -568,6 +574,7 @@ static void set_ppp_carrier_on(struct gsm_modem *gsm)
 		}
 	}
 }
+#endif
 
 static void rssi_handler(struct k_work *work)
 {
@@ -789,7 +796,9 @@ attaching:
 
 	gsm->setup_done = true;
 
+#ifdef CONFIG_NET_PPP
 	set_ppp_carrier_on(gsm);
+#endif
 
 	if (IS_ENABLED(CONFIG_GSM_MUX) && gsm->mux_enabled) {
 		/* Re-use the original iface for AT channel */
@@ -1257,6 +1266,7 @@ static int gsm_init(const struct device *dev)
 				gsm, NULL, NULL, K_PRIO_COOP(7), 0, K_NO_WAIT);
 	k_thread_name_set(&gsm_rx_thread, "gsm_rx");
 
+#ifdef CONFIG_NET_PPP
 	gsm->iface = ppp_net_if();
 	if (!gsm->iface) {
 		LOG_ERR("Couldn't find ppp net_if!");
@@ -1264,10 +1274,13 @@ static int gsm_init(const struct device *dev)
 
 		return -ENODEV;
 	}
+#endif
 
 	if (gsm_ppp_detect(dev) < 0) {
 		LOG_ERR("GSM ppp did not respond!!");
+#ifdef CONFIG_NET_PPP
 		net_if_l2(gsm->iface)->enable(gsm->iface, false);
+#endif
 		modem_context_unregister(&gsm->context);
 
 		/* the thread is not required any longer */
@@ -1278,7 +1291,6 @@ static int gsm_init(const struct device *dev)
 	if (IS_ENABLED(CONFIG_GSM_PPP_AUTOSTART)) {
 		gsm_ppp_start(dev);
 	}
-
 	return 0;
 }
 
