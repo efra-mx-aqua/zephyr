@@ -90,6 +90,12 @@ struct modem_cmd {
 #define SETUP_CMD_NOHANDLE(send_cmd_) \
 		SETUP_CMD(send_cmd_, NULL, NULL, 0U, NULL)
 
+#define SETUP_CMD_ARGS_MAX(cmd_send_, match_cmd_, func_cb_, num_param_, \
+			   max_param_, delim_) { \
+	.send_cmd = cmd_send_, \
+	MODEM_CMD_ARGS_MAX(match_cmd_, func_cb_, num_param_, max_param_, delim_) \
+}
+
 /* series of modem setup commands to run */
 struct setup_cmd {
 	const char *send_cmd;

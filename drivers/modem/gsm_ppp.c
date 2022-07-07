@@ -339,9 +339,9 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_cereg)
 
 static const struct setup_cmd query_cellinfo_cmds[] = {
 	SETUP_CMD_NOHANDLE("AT+CEREG=2"),
-	SETUP_CMD("AT+CEREG?", "", on_cmd_atcmdinfo_cereg, 5U, ","),
+	SETUP_CMD_ARGS_MAX("AT+CEREG?", "", on_cmd_atcmdinfo_cereg, 2U, 5U, ","),
 	SETUP_CMD_NOHANDLE("AT+COPS=3,2"),
-	SETUP_CMD("AT+COPS?", "", on_cmd_atcmdinfo_cops, 3U, ","),
+	SETUP_CMD_ARGS_MAX("AT+COPS?", "", on_cmd_atcmdinfo_cops, 1U, 3U, ","),
 };
 
 static int gsm_query_cellinfo(struct gsm_modem *gsm)
