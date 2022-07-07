@@ -253,9 +253,7 @@ static int ublox_sara_r4_pwr_init(const struct device *dev)
 	if (ublox_sara_r4_pwr_off()) {
 		ublox_sara_r4_pwr_off_force();
 	}
-	if (IS_ENABLED(CONFIG_GSM_PPP_AUTOSTART)) {
-		ublox_sara_r4_pwr_on();
-	}
+	ublox_sara_r4_pwr_on();
 
 	return 0;
 }
