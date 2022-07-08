@@ -1092,6 +1092,8 @@ void gsm_ppp_start(const struct device *dev)
 		return;
 	}
 
+	LOG_INF("GSM PPP start");
+
 	k_work_init_delayable(&gsm->gsm_configure_work, gsm_configure);
 	(void)k_work_reschedule(&gsm->gsm_configure_work, K_NO_WAIT);
 
@@ -1110,23 +1112,27 @@ void gsm_ppp_stop(const struct device *dev)
 		return;
 	}
 
+	/* Cancel any pending RSSI work */
+	k_work_cancel_delayable(&rssi_work_handle);
+
 	net_if_l2(iface)->enable(iface, false);
 
-	if (IS_ENABLED(CONFIG_GSM_MUX)) {
-		/* Cancel any pending RSSI work */
-		k_work_cancel_delayable(&rssi_work_handle);
+	LOG_INF("GSM PPP stop");
+
+	if (IS_ENABLED(CONFIG_GSM_MUX) && gsm->mux_enabled) {
 		/* Lower mux_enabled flag to trigger re-sending AT+CMUX etc */
 		gsm->mux_enabled = false;
 
 		if (gsm->ppp_dev) {
 			uart_mux_disable(gsm->ppp_dev);
 		}
+		if (modem_cmd_handler_tx_lock(&gsm->context.cmd_handler,
+					K_SECONDS(10))) {
+			LOG_WRN("Failed locking modem cmds!");
+		}
 	}
 
-	if (modem_cmd_handler_tx_lock(&gsm->context.cmd_handler,
-				      K_SECONDS(10))) {
-		LOG_WRN("Failed locking modem cmds!");
-	}
+	gsm->running = false;
 }
 
 bool gsm_ppp_is_running(const struct device *dev)
