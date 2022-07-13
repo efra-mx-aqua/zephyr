@@ -65,6 +65,40 @@ enum network_state {
 	GSM_NET_REGISTRATION_DENIED,
 	GSM_NET_UNKNOWN,
 	GSM_NET_ROAMING,
+	GSM_NET_SMS_ONLY,
+	GSM_NET_SMS_ONLY_ROAMING,
+	GSM_NET_EMERGENCY_ONLY,
+	GSM_NET_CSFB_NOT_PREFERED_HOME,
+	GSM_NET_CSFB_NOT_PREFERED_ROAMING,
+};
+
+/* EPS registration status */
+enum eps_network_state {
+	GSM_EPS_NET_INIT = -1,
+	GSM_EPS_NET_NOT_REGISTERED,
+	GSM_EPS_NET_HOME_NETWORK,
+	GSM_EPS_NET_SEARCHING,
+	GSM_EPS_NET_REGISTRATION_DENIED,
+	GSM_EPS_NET_UNKNOWN,
+	GSM_EPS_NET_ROAMING,
+	GSM_EPS_NET_UNDEFINED1,
+	GSM_EPS_NET_UNDEFINED2,
+	GSM_EPS_NET_EMERGENCY_ONLY,
+};
+
+/* GPRS registration status */
+enum gprs_network_state {
+	GSM_GPRS_NET_INIT = -1,
+	GSM_GPRS_NET_NOT_REGISTERED = 0,
+	GSM_GPRS_NET_HOME_NETWORK,
+	GSM_GPRS_NET_SEARCHING,
+	GSM_GPRS_NET_REGISTRATION_DENIED,
+	GSM_GPRS_NET_UNKNOWN,
+	GSM_GPRS_NET_ROAMING,
+	GSM_GPRS_NET_UNDEFINED1,
+	GSM_GPRS_NET_UNDEFINED2,
+	GSM_GPRS_NET_EMERGENCY_ONLY,
+	GSM_GPRS_NET__ENUMCOUNT,
 };
 
 /* During the modem setup, we first create DLCI control channel and then
@@ -108,8 +142,6 @@ static struct gsm_modem {
 	struct k_work_q workq;
 	struct k_work_delayable rssi_work_handle;
 	struct gsm_ppp_modem_info minfo;
-
-	enum network_state net_state;
 
 	int register_retries;
 	int rssi_retries;
@@ -345,31 +377,50 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_iccid)
 }
 #endif /* CONFIG_MODEM_SIM_NUMBERS */
 
-MODEM_CMD_DEFINE(on_cmd_net_reg_sts)
-{
-	gsm.net_state = (enum network_state)atoi(argv[1]);
+static const char *net_reg_state_string[] = {
+	"Not registered",
+	"Registered to home network",
+	"Searching ...",
+	"Network registration DENIED!",
+	"Unknown",
+	"Registered to network, roaming",
+	"SMS only",
+	"SMS only roaming",
+	"Emergency only",
+};
 
-	switch (gsm.net_state) {
-	case GSM_NET_NOT_REGISTERED:
-		LOG_INF("Network %s.", "not registered");
-		break;
-	case GSM_NET_HOME_NETWORK:
-		LOG_INF("Network %s.", "registered, home network");
-		break;
-	case GSM_NET_SEARCHING:
-		LOG_INF("Searching for network...");
-		break;
-	case GSM_NET_REGISTRATION_DENIED:
-		LOG_INF("Network %s.", "registration denied");
-		break;
-	case GSM_NET_UNKNOWN:
-		LOG_INF("Network %s.", "unknown");
-		break;
-	case GSM_NET_ROAMING:
-		LOG_INF("Network %s.", "registered, roaming");
-		break;
-	default:
-		break;
+/*
+ * Handler: +CREG: <n>[0],<stat>[1],<tac>[2],<ci>[3],<AcT>[4]
+ *	    +CREG: <stat>[0],<tac>[1],<ci>[2],<AcT>[3]  (URC)
+ */
+MODEM_CMD_DEFINE(on_cmd_atcmdinfo_creg)
+{
+	int arg_idx;
+	int argc_min;
+
+	/* Check if it is a URC */
+	if (argc == 1 || argc == 4) {
+		arg_idx = 0;
+		argc_min = 1;
+	} else {
+		arg_idx = 1;
+		argc_min = 2;
+	}
+
+	if (argc >= argc_min) {
+		int net_reg = unquoted_atoi(argv[arg_idx++], 16);
+		gsm.context.data_gsm_reg = net_reg;
+		if (net_reg < ARRAY_SIZE(net_reg_state_string)) {
+			LOG_INF("GSM Network: %s", net_reg_state_string[net_reg]);
+		}
+	}
+	if (argc > argc_min) {
+		gsm.context.data_lac = unquoted_atoi(argv[arg_idx++], 16);
+		gsm.context.data_cellid = unquoted_atoi(argv[arg_idx++], 16);
+		LOG_INF("lac: %u, cellid: %u",
+			gsm.context.data_lac,
+			gsm.context.data_cellid);
+
 	}
 
 	return 0;
@@ -377,15 +428,68 @@ MODEM_CMD_DEFINE(on_cmd_net_reg_sts)
 
 /*
  * Handler: +CEREG: <n>[0],<stat>[1],<tac>[2],<ci>[3],<AcT>[4]
+ *	    +CEREG: <stat>[0],<tac>[1],<ci>[2],<AcT>[3]  (URC)
  */
 MODEM_CMD_DEFINE(on_cmd_atcmdinfo_cereg)
 {
-	if (argc >= 4) {
-		gsm.context.data_eps_reg = unquoted_atoi(argv[1], 16);
-		gsm.context.data_lac = unquoted_atoi(argv[2], 16);
-		gsm.context.data_cellid = unquoted_atoi(argv[3], 16);
-		LOG_INF("eps_reg: %u lac: %u, cellid: %u",
-			gsm.context.data_eps_reg,
+	int arg_idx;
+	int argc_min;
+
+	/* Check if it is a URC */
+	if (argc == 1 || argc == 4) {
+		arg_idx = 0;
+		argc_min = 1;
+	} else {
+		arg_idx = 1;
+		argc_min = 2;
+	}
+	if (argc >= argc_min) {
+		int eps_reg = unquoted_atoi(argv[arg_idx++], 16);
+		gsm.context.data_eps_reg = eps_reg;
+		if (eps_reg < ARRAY_SIZE(net_reg_state_string)) {
+			LOG_INF("EPS Network: %s", net_reg_state_string[eps_reg]);
+		}
+	}
+	if (argc > argc_min) {
+		gsm.context.data_lac = unquoted_atoi(argv[arg_idx++], 16);
+		gsm.context.data_cellid = unquoted_atoi(argv[arg_idx++], 16);
+		LOG_INF("lac: %u, cellid: %u",
+			gsm.context.data_lac,
+			gsm.context.data_cellid);
+	}
+
+	return 0;
+}
+
+/*
+ * Handler: +CGREG: <n>[0],<stat>[1],<lac>[2],<ci>[3],<AcT>[4],<rac>[5]
+ *          +CGREG: <stat>[0],<lac>[1],<ci>[2],<AcT>[3] (UICR)
+ */
+MODEM_CMD_DEFINE(on_cmd_atcmdinfo_cgreg)
+{
+	int arg_idx;
+	int argc_min;
+
+	/* Check if it is a URC */
+	if (argc == 1 || argc == 4) {
+		arg_idx = 0;
+		argc_min = 1;
+	} else {
+		arg_idx = 1;
+		argc_min = 2;
+	}
+
+	if (argc >= argc_min) {
+		int gprs_reg = unquoted_atoi(argv[arg_idx++], 16);
+		gsm.context.data_gprs_reg = gprs_reg;
+		if (gprs_reg < ARRAY_SIZE(net_reg_state_string)) {
+			LOG_INF("GPRS Network: %s", net_reg_state_string[gprs_reg]);
+		}
+	}
+	if (argc > argc_min) {
+		gsm.context.data_lac = unquoted_atoi(argv[arg_idx++], 16);
+		gsm.context.data_cellid = unquoted_atoi(argv[arg_idx++], 16);
+		LOG_INF("lac: %u, cellid: %u",
 			gsm.context.data_lac,
 			gsm.context.data_cellid);
 	}
@@ -394,8 +498,12 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_cereg)
 }
 
 static const struct setup_cmd query_cellinfo_cmds[] = {
+	SETUP_CMD_NOHANDLE("AT+CREG=2"),
+	SETUP_CMD_ARGS_MAX("AT+CREG?", "", on_cmd_atcmdinfo_creg, 2U, 5U, ","),
 	SETUP_CMD_NOHANDLE("AT+CEREG=2"),
 	SETUP_CMD_ARGS_MAX("AT+CEREG?", "", on_cmd_atcmdinfo_cereg, 2U, 5U, ","),
+	SETUP_CMD_NOHANDLE("AT+CGREG=2"),
+	SETUP_CMD_ARGS_MAX("AT+CGREG?", "", on_cmd_atcmdinfo_cgreg, 2U, 6U, ","),
 	SETUP_CMD_NOHANDLE("AT+COPS=3,2"),
 	SETUP_CMD_ARGS_MAX("AT+COPS?", "", on_cmd_atcmdinfo_cops, 1U, 3U, ","),
 };
@@ -538,9 +646,6 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_attached)
 
 static const struct modem_cmd read_cops_cmd =
 	MODEM_CMD_ARGS_MAX("+COPS:", on_cmd_atcmdinfo_cops, 1U, 4U, ",");
-
-static const struct modem_cmd check_net_reg_cmd =
-	MODEM_CMD("+CREG: ", on_cmd_net_reg_sts, 2U, ",");
 
 static const struct modem_cmd check_attached_cmd =
 	MODEM_CMD("+CGATT:", on_cmd_atcmdinfo_attached, 1U, ",");
@@ -733,6 +838,43 @@ int __weak gsm_ppp_pre_connect_hook(struct modem_context *ctx,
 	return 0;
 }
 
+static inline bool gsm_is_gsm_net_registered(struct gsm_modem *gsm)
+{
+	if ((gsm->context.data_gsm_reg == GSM_NET_ROAMING) ||
+	    (gsm->context.data_gsm_reg == GSM_NET_HOME_NETWORK)) {
+		return true;
+	}
+
+	return false;
+}
+
+static inline bool gsm_is_eps_net_registered(struct gsm_modem *gsm)
+{
+	if ((gsm->context.data_eps_reg == GSM_EPS_NET_ROAMING) ||
+	    (gsm->context.data_eps_reg == GSM_EPS_NET_HOME_NETWORK)) {
+		return true;
+	}
+
+	return false;
+}
+
+static inline bool gsm_is_gprs_net_registered(struct gsm_modem *gsm)
+{
+	if ((gsm->context.data_gprs_reg == GSM_GPRS_NET_ROAMING) ||
+	    (gsm->context.data_gprs_reg == GSM_GPRS_NET_HOME_NETWORK)) {
+		return true;
+	}
+
+	return false;
+}
+
+static inline bool gsm_is_registered(struct gsm_modem *gsm)
+{
+	return gsm_is_gsm_net_registered(gsm) ||
+	       gsm_is_eps_net_registered(gsm) ||
+	       gsm_is_gprs_net_registered(gsm);
+}
+
 static void gsm_finalize_connection(struct k_work *work)
 {
 	int ret = 0;
@@ -842,14 +984,8 @@ auto_cops:
 
 registering:
 	/* Wait for cell tower registration */
-	ret = modem_cmd_send_nolock(&gsm->context.iface,
-				    &gsm->context.cmd_handler,
-				    &check_net_reg_cmd, 1,
-				    "AT+CREG?",
-				    &gsm->sem_response,
-				    GSM_CMD_SETUP_TIMEOUT);
-	if ((ret < 0) || ((gsm->net_state != GSM_NET_ROAMING) &&
-			 (gsm->net_state != GSM_NET_HOME_NETWORK))) {
+	ret = gsm_query_cellinfo(gsm);
+	if ((ret < 0) || !gsm_is_registered(gsm)) {
 		if (!gsm->register_retries) {
 			gsm->register_retries = CONFIG_MODEM_GSM_REGISTER_TIMEOUT *
 				MSEC_PER_SEC / GSM_REGISTER_DELAY_MSEC;
@@ -1288,7 +1424,9 @@ void gsm_ppp_stop(const struct device *dev)
 
 	gsm->running = false;
 	gsm->attached = false;
-	gsm->net_state = GSM_NET_INIT;
+	gsm->context.data_gsm_reg = GSM_NET_INIT;
+	gsm->context.data_eps_reg = GSM_EPS_NET_INIT;
+	gsm->context.data_gprs_reg = GSM_GPRS_NET_INIT;
 	gsm_ppp_unlock(gsm);
 }
 
@@ -1473,7 +1611,9 @@ static int gsm_init(const struct device *dev)
 		return r;
 	}
 
-	gsm->net_state = GSM_NET_INIT;
+	gsm->context.data_gsm_reg = GSM_NET_INIT;
+	gsm->context.data_eps_reg = GSM_EPS_NET_INIT;
+	gsm->context.data_gprs_reg = GSM_GPRS_NET_INIT;
 
 	LOG_DBG("iface->read %p iface->write %p",
 		gsm->context.iface.read, gsm->context.iface.write);
