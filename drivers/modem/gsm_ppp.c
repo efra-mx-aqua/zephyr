@@ -500,13 +500,9 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_cgreg)
 }
 
 static const struct setup_cmd query_cellinfo_cmds[] = {
-	SETUP_CMD_NOHANDLE("AT+CREG=2"),
 	SETUP_CMD_ARGS_MAX("AT+CREG?", "", on_cmd_atcmdinfo_creg, 2U, 5U, ","),
-	SETUP_CMD_NOHANDLE("AT+CEREG=2"),
 	SETUP_CMD_ARGS_MAX("AT+CEREG?", "", on_cmd_atcmdinfo_cereg, 2U, 5U, ","),
-	SETUP_CMD_NOHANDLE("AT+CGREG=2"),
 	SETUP_CMD_ARGS_MAX("AT+CGREG?", "", on_cmd_atcmdinfo_cgreg, 2U, 6U, ","),
-	SETUP_CMD_NOHANDLE("AT+COPS=3,2"),
 	SETUP_CMD_ARGS_MAX("AT+COPS?", "", on_cmd_atcmdinfo_cops, 1U, 3U, ","),
 };
 
@@ -627,6 +623,11 @@ static const struct setup_cmd setup_cmds[] = {
 
 	/* disable unsolicited network registration codes */
 	SETUP_CMD_NOHANDLE("AT+CREG=0"),
+	SETUP_CMD_NOHANDLE("AT+CEREG=0"),
+	SETUP_CMD_NOHANDLE("AT+CGREG=0"),
+
+	/* read the operator as numeric */
+	SETUP_CMD_NOHANDLE("AT+COPS=3,2"),
 };
 
 MODEM_CMD_DEFINE(on_cmd_atcmdinfo_attached)
@@ -645,9 +646,6 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_attached)
 	return 0;
 }
 
-
-static const struct modem_cmd read_cops_cmd =
-	MODEM_CMD_ARGS_MAX("+COPS:", on_cmd_atcmdinfo_cops, 1U, 4U, ",");
 
 static const struct modem_cmd check_attached_cmd =
 	MODEM_CMD("+CGATT:", on_cmd_atcmdinfo_attached, 1U, ",");
@@ -829,12 +827,12 @@ static void rssi_handler(struct k_work *work)
 	gsm_ppp_unlock(gsm);
 }
 
-int __weak gsm_ppp_setup_hook(struct modem_context *ctx, struct k_sem *sem)
+__weak int gsm_ppp_setup_hook(struct modem_context *ctx, struct k_sem *sem)
 {
 	return 0;
 }
 
-int __weak gsm_ppp_pre_connect_hook(struct modem_context *ctx,
+__weak int gsm_ppp_pre_connect_hook(struct modem_context *ctx,
 				    struct k_sem *sem)
 {
 	return 0;
