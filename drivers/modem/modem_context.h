@@ -73,6 +73,7 @@ struct modem_context {
 	int      data_gprs_reg;
 	int      data_lac;
 	int      data_cellid;
+	int	 data_psm;
 #if defined(CONFIG_MODEM_CACHE_OPERATOR)
 	int   data_cached_operator;
 #endif

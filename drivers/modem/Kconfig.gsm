@@ -143,6 +143,12 @@ config MODEM_GSM_MNOPROF
          profile for the network connection.  This value is specific to
          the network provider and must be changed.
 
+config MODEM_GSM_PSM
+       bool "Enable Power Saving Mode"
+       help
+         If this is enabled, the modem will enable PSM after powering on
+         the modem.
+
 source "drivers/modem/Kconfig.gsm_ublox"
 
 endif

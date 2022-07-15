@@ -33,7 +33,6 @@ enum modem_rat {
 };
 
 struct modem_info {
-	int mdm_psm;
 	uint16_t mdm_urat[MDM_URAT_SIZE];
 	uint32_t mdm_lte_bandmask[MDM_UBANDMASKS_SIZE];
 	uint32_t mdm_nb_bandmask[MDM_UBANDMASKS_SIZE];
@@ -55,31 +54,6 @@ static int unquoted_atoi(const char *s, int base)
 	}
 
 	return strtol(s, NULL, base);
-}
-
-/* Handler: +CPSMS: <mode>,[...] */
-MODEM_CMD_DEFINE(on_cmd_atcmdinfo_psm)
-{
-	size_t out_len;
-	char buf[32];
-	char *psm;
-	int ret;
-
-	out_len = net_buf_linearize(buf,
-				    sizeof(buf) - 1,
-				    data->rx_buf, 0, len);
-	buf[out_len] = '\0';
-
-	psm = strchr(buf, ':');
-	if (!psm) {
-		ret = -EINVAL;
-	} else {
-		minfo.mdm_psm = *(psm + 1) - '0';
-		LOG_INF("PSM mode: %d", minfo.mdm_psm);
-	}
-
-	k_sem_give(&ublox_sem);
-	return ret;
 }
 
 static int gsm_setup_disconnect(struct modem_context *ctx, struct k_sem *sem)
@@ -121,50 +95,6 @@ static int gsm_setup_reset(struct modem_context *ctx, struct k_sem *sem)
 	if (ret < 0) {
 		LOG_ERR("AT+CFUN=15 ret:%d", ret);
 		ret = 0;
-	}
-
-	return ret;
-}
-
-static int gsm_setup_psm(struct modem_context *ctx, struct k_sem *sem)
-{
-	int ret;
-	struct setup_cmd query_cmds[] = {
-		SETUP_CMD("AT+CPSMS?", "", on_cmd_atcmdinfo_psm, 0U, ""),
-	};
-	struct setup_cmd set_cmds[] = {
-		SETUP_CMD_NOHANDLE("AT+CPSMS=0"),
-	};
-
-	ret = modem_cmd_handler_setup_cmds_nolock(&ctx->iface,
-						  &ctx->cmd_handler,
-						  query_cmds,
-						  ARRAY_SIZE(query_cmds),
-						  &ublox_sem,
-						  GSM_CMD_SETUP_TIMEOUT);
-	if (ret < 0) {
-		LOG_ERR("Querying PSM ret:%d", ret);
-		return ret;
-	}
-
-	if (minfo.mdm_psm == 1) {
-		gsm_setup_disconnect(ctx, sem);
-
-		LOG_WRN("Disabling PSM");
-		ret = modem_cmd_handler_setup_cmds_nolock(&ctx->iface,
-							  &ctx->cmd_handler,
-							  set_cmds,
-							  ARRAY_SIZE(set_cmds),
-							  &ublox_sem,
-							  GSM_CMD_SETUP_TIMEOUT);
-		if (ret < 0) {
-			LOG_ERR("Setting PSM ret:%d", ret);
-			return ret;
-		}
-
-		k_sleep(K_SECONDS(3));
-
-		return -EAGAIN;
 	}
 
 	return ret;
@@ -511,12 +441,6 @@ int gsm_ppp_pre_connect_hook(struct modem_context *ctx, struct k_sem *sem)
 int gsm_ppp_setup_hook(struct modem_context *ctx, struct k_sem *sem)
 {
 	int ret;
-
-	ret = gsm_setup_psm(ctx, sem);
-	if (ret < 0) {
-		LOG_WRN("gsm_setup_psm returned %d", ret);
-		return ret;
-	}
 
 	ret = gsm_setup_urat(ctx, sem);
 	if (ret < 0) {

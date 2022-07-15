@@ -973,6 +973,64 @@ static int gsm_setup_mnoprof(struct gsm_modem *gsm)
 }
 #endif
 
+/* Handler: +CPSMS: <mode>,[...] */
+MODEM_CMD_DEFINE(on_cmd_atcmdinfo_psm)
+{
+	if (argc > 0) {
+		gsm.context.data_psm = atoi(argv[0]);
+
+		LOG_INF("PSM mode: %d", gsm.context.data_psm);
+	}
+
+	k_sem_give(&gsm.sem_response);
+	return 0;
+}
+
+static int gsm_setup_psm(struct gsm_modem *gsm)
+{
+	int psm = 0;
+	int ret;
+	static const struct modem_cmd cmd =
+		MODEM_CMD_ARGS_MAX("+CPSMS:", on_cmd_atcmdinfo_psm, 1U, 7U, ",");
+#ifdef CONFIG_MODEM_GSM_PSM
+	struct setup_cmd set_cmd = SETUP_CMD_NOHANDLE("AT+CPSMS=1");
+	psm = 1;
+#else
+	struct setup_cmd set_cmd = SETUP_CMD_NOHANDLE("AT+CPSMS=0");
+#endif
+
+	ret = modem_cmd_send_nolock(&gsm->context.iface,
+				    &gsm->context.cmd_handler,
+				    &cmd, 1,
+				    "AT+CPSMS?",
+				    &gsm->sem_response,
+				    GSM_CMD_SETUP_TIMEOUT);
+	if (ret < 0) {
+		LOG_ERR("Querying PSM ret:%d", ret);
+		return ret;
+	}
+
+	if (gsm->context.data_psm != psm) {
+		gsm_setup_disconnect(gsm);
+
+		LOG_WRN("Setting PSM: %d", psm);
+		ret = modem_cmd_handler_setup_cmds_nolock(&gsm->context.iface,
+							  &gsm->context.cmd_handler,
+							  &set_cmd, 1,
+							  &gsm->sem_response,
+							  GSM_CMD_SETUP_TIMEOUT);
+		if (ret < 0) {
+			LOG_DBG("%s ret:%d", log_strdup(set_cmd.send_cmd), ret);
+			return ret;
+		}
+		k_sleep(K_SECONDS(3));
+
+		return -EAGAIN;
+	}
+
+	return ret;
+}
+
 static int gsm_modem_setup(struct gsm_modem *gsm)
 {
 	int ret;
@@ -984,6 +1042,12 @@ static int gsm_modem_setup(struct gsm_modem *gsm)
 		return ret;
 	}
 #endif
+
+	ret = gsm_setup_psm(gsm);
+	if (ret < 0) {
+		LOG_WRN("gsm_setup_psm returned %d", ret);
+		return ret;
+	}
 
 	if (gsm->req_reset) {
 		ret = gsm_setup_reset(gsm);
