@@ -67,6 +67,7 @@ struct modem_context {
 	char *data_iccid;
 #endif
 	uint16_t data_operator;
+	uint16_t data_operator_profile;
 	int      data_gsm_reg;
 	int      data_eps_reg;
 	int      data_gprs_reg;

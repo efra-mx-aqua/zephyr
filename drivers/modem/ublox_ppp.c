@@ -33,7 +33,6 @@ enum modem_rat {
 };
 
 struct modem_info {
-	int mdm_mnoprof;
 	int mdm_psm;
 	uint16_t mdm_urat[MDM_URAT_SIZE];
 	uint32_t mdm_lte_bandmask[MDM_UBANDMASKS_SIZE];
@@ -56,32 +55,6 @@ static int unquoted_atoi(const char *s, int base)
 	}
 
 	return strtol(s, NULL, base);
-}
-
-/* Handler: +UMNOPROF: <mnoprof> */
-MODEM_CMD_DEFINE(on_cmd_atcmdinfo_mnoprof)
-{
-	size_t out_len;
-	char buf[16];
-	char *prof;
-	int ret;
-
-	out_len = net_buf_linearize(buf,
-				    sizeof(buf) - 1,
-				    data->rx_buf, 0, len);
-	buf[out_len] = '\0';
-	prof = strchr(buf, ':');
-	if (!prof || *(prof + 1) != ' ') {
-		minfo.mdm_mnoprof = -1;
-		ret = -EINVAL;
-	} else {
-		prof = prof + 2;
-		minfo.mdm_mnoprof = atoi(prof);
-		LOG_INF("MNO profile: %d", minfo.mdm_mnoprof);
-	}
-
-	k_sem_give(&ublox_sem);
-	return 0;
 }
 
 /* Handler: +CPSMS: <mode>,[...] */
@@ -148,51 +121,6 @@ static int gsm_setup_reset(struct modem_context *ctx, struct k_sem *sem)
 	if (ret < 0) {
 		LOG_ERR("AT+CFUN=15 ret:%d", ret);
 		ret = 0;
-	}
-
-	return ret;
-}
-
-static int gsm_setup_mnoprof(struct modem_context *ctx, struct k_sem *sem)
-{
-	int ret;
-	struct setup_cmd cmds[] = {
-		SETUP_CMD("AT+UMNOPROF?", "", on_cmd_atcmdinfo_mnoprof, 0U, ""),
-	};
-
-	ret = modem_cmd_handler_setup_cmds_nolock(&ctx->iface,
-						  &ctx->cmd_handler,
-						  cmds,
-						  ARRAY_SIZE(cmds),
-						  &ublox_sem,
-						  GSM_CMD_SETUP_TIMEOUT);
-	if (ret < 0) {
-		LOG_ERR("AT+UMNOPROF ret:%d", ret);
-		return ret;
-	}
-
-	if (minfo.mdm_mnoprof != -1 && minfo.mdm_mnoprof != CONFIG_MODEM_GSM_MNOPROF) {
-		gsm_setup_disconnect(ctx, sem);
-
-		/* The wrong MNO profile was set, change it */
-		LOG_WRN("Changing MNO profile from %d to %d",
-			minfo.mdm_mnoprof, CONFIG_MODEM_GSM_MNOPROF);
-
-		/* Set the profile */
-		ret = modem_cmd_send_nolock(&ctx->iface,
-					    &ctx->cmd_handler,
-					    NULL, 0,
-					    "AT+UMNOPROF=" STRINGIFY(CONFIG_MODEM_GSM_MNOPROF),
-					    &ublox_sem,
-					    GSM_CMD_CFUNC_TIMEOUT);
-		if (ret < 0) {
-			LOG_ERR("AT+UMNOPROF ret:%d", ret);
-		}
-
-		/* Reboot */
-		gsm_setup_reset(ctx, sem);
-
-		return -EAGAIN;
 	}
 
 	return ret;
@@ -583,12 +511,6 @@ int gsm_ppp_pre_connect_hook(struct modem_context *ctx, struct k_sem *sem)
 int gsm_ppp_setup_hook(struct modem_context *ctx, struct k_sem *sem)
 {
 	int ret;
-
-	ret = gsm_setup_mnoprof(ctx, sem);
-	if (ret < 0) {
-		LOG_WRN("gsm_setup_mnoprof returned %d", ret);
-		return ret;
-	}
 
 	ret = gsm_setup_psm(ctx, sem);
 	if (ret < 0) {

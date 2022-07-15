@@ -150,6 +150,7 @@ static struct gsm_modem {
 	bool attached : 1;
 	bool running : 1;
 	bool modem_info_queried : 1;
+	bool req_reset : 1;
 
 	void *user_data;
 
@@ -827,17 +828,6 @@ static void rssi_handler(struct k_work *work)
 	gsm_ppp_unlock(gsm);
 }
 
-__weak int gsm_ppp_setup_hook(struct modem_context *ctx, struct k_sem *sem)
-{
-	return 0;
-}
-
-__weak int gsm_ppp_pre_connect_hook(struct modem_context *ctx,
-				    struct k_sem *sem)
-{
-	return 0;
-}
-
 static inline bool gsm_is_gsm_net_registered(struct gsm_modem *gsm)
 {
 	if ((gsm->context.data_gsm_reg == GSM_NET_ROAMING) ||
@@ -873,6 +863,137 @@ static inline bool gsm_is_registered(struct gsm_modem *gsm)
 	return gsm_is_gsm_net_registered(gsm) ||
 	       gsm_is_eps_net_registered(gsm) ||
 	       gsm_is_gprs_net_registered(gsm);
+}
+
+static int gsm_setup_disconnect(struct gsm_modem *gsm)
+{
+	int ret;
+	struct setup_cmd cmds[] = {
+		SETUP_CMD_NOHANDLE("AT+CFUN=0"),
+	};
+
+	LOG_WRN("Disconnecting");
+	ret = modem_cmd_handler_setup_cmds_nolock(&gsm->context.iface,
+					&gsm->context.cmd_handler,
+					&cmds[0],
+					ARRAY_SIZE(cmds),
+					&gsm->sem_response,
+					GSM_CMD_SETUP_TIMEOUT);
+	k_sleep(K_SECONDS(1));
+
+	if (ret < 0) {
+		LOG_DBG("AT+CFUN=0 ret:%d", ret);
+		ret = 0;
+	}
+
+	return ret;
+}
+
+static int gsm_setup_reset(struct gsm_modem *gsm)
+{
+	int ret;
+	struct setup_cmd cmds[] = {
+		SETUP_CMD_NOHANDLE("AT+CFUN=15"),
+	};
+
+	LOG_WRN("Modem reset");
+	ret = modem_cmd_handler_setup_cmds_nolock(&gsm->context.iface,
+					&gsm->context.cmd_handler,
+					&cmds[0],
+					ARRAY_SIZE(cmds),
+					&gsm->sem_response,
+					GSM_CMD_SETUP_TIMEOUT);
+	if (ret < 0) {
+		LOG_DBG("AT+CFUN=15 ret:%d", ret);
+		ret = 0;
+	}
+
+	return ret;
+}
+
+/* Handler: +UMNOPROF: <mnoprof>[,..] */
+MODEM_CMD_DEFINE(on_cmd_atcmdinfo_mnoprof)
+{
+	if (argc > 0) {
+		gsm.context.data_operator_profile = atoi(argv[0]);
+		LOG_INF("MNO profile: %d", gsm.context.data_operator_profile);
+	}
+
+	k_sem_give(&gsm.sem_response);
+
+	return 0;
+}
+
+#if defined(CONFIG_MODEM_GSM_MNOPROF)
+static int gsm_setup_mnoprof(struct gsm_modem *gsm)
+{
+	int ret;
+	struct setup_cmd set_cmd = SETUP_CMD_NOHANDLE("AT+UMNOPROF="
+				   STRINGIFY(CONFIG_MODEM_GSM_MNOPROF));
+	static const struct modem_cmd cmd =
+		MODEM_CMD_ARGS_MAX("+UMNOPROF:", on_cmd_atcmdinfo_mnoprof, 1U, 4U, ",");
+
+	ret = modem_cmd_send_nolock(&gsm->context.iface,
+				    &gsm->context.cmd_handler,
+				    &cmd, 1,
+				    "AT+UMNOPROF?",
+				    &gsm->sem_response,
+				    GSM_CMD_SETUP_TIMEOUT);
+	if (ret < 0) {
+		LOG_DBG("AT+UMNOPROF? ret:%d", ret);
+		return ret;
+	}
+
+	if (gsm->context.data_operator_profile != -1 &&
+	    gsm->context.data_operator_profile != CONFIG_MODEM_GSM_MNOPROF) {
+		gsm_setup_disconnect(gsm);
+
+		/* The wrong MNO profile was set, change it */
+		LOG_WRN("Changing MNO profile from %d to %d",
+			gsm->context.data_operator_profile,
+			CONFIG_MODEM_GSM_MNOPROF);
+
+		/* Set the profile */
+		ret = modem_cmd_handler_setup_cmds_nolock(&gsm->context.iface,
+							  &gsm->context.cmd_handler,
+							  &set_cmd, 1,
+							  &gsm->sem_response,
+							  GSM_CMD_SETUP_TIMEOUT);
+		if (ret < 0) {
+			LOG_DBG("%s ret:%d", set_cmd.send_cmd, ret);
+		}
+
+		/* Reboot */
+		gsm_setup_reset(gsm);
+
+		return -EAGAIN;
+	}
+
+	return ret;
+}
+#endif
+
+static int gsm_modem_setup(struct gsm_modem *gsm)
+{
+	int ret;
+
+#if defined(CONFIG_MODEM_GSM_MNOPROF)
+	ret = gsm_setup_mnoprof(gsm);
+	if (ret < 0) {
+		LOG_WRN("gsm_setup_mnoprof returned %d", ret);
+		return ret;
+	}
+#endif
+
+	if (gsm->req_reset) {
+		ret = gsm_setup_reset(gsm);
+		if (ret == 0) {
+			gsm->req_reset = false;
+		}
+		ret = -EAGAIN;
+	}
+
+	return ret;
 }
 
 static void gsm_finalize_connection(struct k_work *work)
@@ -946,9 +1067,9 @@ static void gsm_finalize_connection(struct k_work *work)
 		goto unlock;
 	}
 
-	ret = gsm_ppp_setup_hook(&gsm->context, &gsm->sem_response);
+	ret = gsm_modem_setup(gsm);
 	if (ret < 0) {
-		LOG_ERR("%s returned %d, %s", "gsm_setup_mccmno", ret, "retrying...");
+		LOG_ERR("%s returned %d, %s", "gsm_modem_setup", ret, "retrying...");
 		(void)gsm_work_reschedule(&gsm->gsm_configure_work, GSM_RETRY_DELAY);
 		goto unlock;
 	}
@@ -1053,12 +1174,6 @@ attaching:
 #if defined(CONFIG_MODEM_CELL_INFO)
 		(void)gsm_query_cellinfo(gsm);
 #endif
-	}
-
-	ret = gsm_ppp_pre_connect_hook(&gsm->context, &gsm->sem_response);
-	if (ret < 0) {
-		(void)k_work_reschedule(&gsm->gsm_configure_work, K_SECONDS(1));
-		goto unlock;
 	}
 
 	LOG_DBG("modem setup returned %d, %s", ret, "enable PPP");
