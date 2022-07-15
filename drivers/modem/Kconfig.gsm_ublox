@@ -1,12 +1,12 @@
-# © 2020 Endian Technologies AB
+# © 2022 Aqua Robur AB
 #
 # SPDX-License-Identifier: Apache-2.0
 
-config UBLOX_PPP_EXTENSIONS
+config MODEM_GSM_UBLOX_EXTENSIONS
        bool "Enable Ublox modem extensions for gsm_ppp"
-       depends on CONFIG_MODEM_GSM_PPP
+endif
 
-if UBLOX_PPP_EXTENSIONS
+if MODEM_GSM_UBLOX_EXTENSIONS
 
 config MODEM_GSM_MNOPROF
        int "MNO profile for the network connection"
@@ -54,7 +54,7 @@ config MODEM_GSM_URAT1
          This setting is used to change the RAT 1 that the modem will use
          to connect to the network.
          This is not meant to be upstreamed as-is!
-	 (3: LTE, 7: LTE Cat M1, 8: LTE Cat NB1, 9: GPRS / eGPRS)
+        (3: LTE, 7: LTE Cat M1, 8: LTE Cat NB1, 9: GPRS / eGPRS)
 
 config MODEM_GSM_URAT2
        int "Radio Access Technology (RAT) 2"
@@ -64,7 +64,8 @@ config MODEM_GSM_URAT2
          This setting is used to change the RAT 2 that the modem will use
          to connect to the network.
          This is not meant to be upstreamed as-is!
-	 (3: LTE, 7: LTE Cat M1, 8: LTE Cat NB1, 9: GPRS / eGPRS)
+        (3: LTE, 7: LTE Cat M1, 8: LTE Cat NB1, 9: GPRS / eGPRS)
+
 
 endif # MODEM_GSM_CONFIGURE_URAT
 

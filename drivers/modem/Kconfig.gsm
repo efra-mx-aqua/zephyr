@@ -135,4 +135,6 @@ config MODEM_GSM_FACTORY_RESET_AT_BOOT
 	  helpful if your modem has a tendency to get stuck due to cached
 	  state.
 
+source "drivers/modem/Kconfig.gsm_ublox"
+
 endif
