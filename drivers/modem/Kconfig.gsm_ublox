@@ -4,7 +4,6 @@
 
 config MODEM_GSM_UBLOX_EXTENSIONS
        bool "Enable Ublox modem extensions for gsm_ppp"
-endif
 
 if MODEM_GSM_UBLOX_EXTENSIONS
 
@@ -16,83 +15,108 @@ config MODEM_GSM_MNOPROF
          profile for the network connection.  This value is specific to
          the network provider and must be changed.
 
-config MODEM_GSM_CONFIGURE_URAT
+config MODEM_GSM_CONFIGURE_RAT
        bool "Enable support for selecting RATs"
        default y
        help
          Choose this setting to select the Radio Access Technologies used.
 
-config MODEM_GSM_CONFIGURE_URAT1
+config MODEM_GSM_CONFIGURE_RAT1
        bool "Enable support for selecting RATs"
        default y
-       depends on MODEM_GSM_CONFIGURE_URAT
+       depends on MODEM_GSM_CONFIGURE_RAT
        help
          Choose this setting to select the Radio Access Technologies used.
 
-config MODEM_GSM_CONFIGURE_URAT2
+config MODEM_GSM_CONFIGURE_RAT2
        bool "Enable support for selecting RATs"
        default n
-       depends on MODEM_GSM_CONFIGURE_URAT && MODEM_GSM_CONFIGURE_URAT1
+       depends on MODEM_GSM_CONFIGURE_RAT && MODEM_GSM_CONFIGURE_RAT1
        help
          Choose this setting to select the Radio Access Technologies used.
 
-if MODEM_GSM_CONFIGURE_URAT
+if MODEM_GSM_CONFIGURE_RAT
 
-config MODEM_GSM_URAT
+config MODEM_GSM_RAT
        string "Radio Access Technologies (RATs)"
        default "8"
        help
          This setting is used to change the RATs that the modem will use
          to connect to the network
-         (legacy, use MODEM_GSM_URAT1, MODEM_GSM_URAT2 and/or MODEM_GSM_URAT3)
+         (legacy, use MODEM_GSM_RAT1, MODEM_GSM_RAT2 and/or MODEM_GSM_RAT3)
 
-config MODEM_GSM_URAT1
+config MODEM_GSM_RAT1
        int "Radio Access Technology (RAT) 1"
        default 8
-       depends on MODEM_GSM_CONFIGURE_URAT1
+       depends on MODEM_GSM_CONFIGURE_RAT1
        help
          This setting is used to change the RAT 1 that the modem will use
          to connect to the network.
          This is not meant to be upstreamed as-is!
-        (3: LTE, 7: LTE Cat M1, 8: LTE Cat NB1, 9: GPRS / eGPRS)
+         (3: LTE, 7: LTE Cat M1, 8: LTE Cat NB1, 9: GPRS / eGPRS)
 
-config MODEM_GSM_URAT2
+config MODEM_GSM_RAT2
        int "Radio Access Technology (RAT) 2"
        default 8
-       depends on MODEM_GSM_CONFIGURE_URAT2
+       depends on MODEM_GSM_CONFIGURE_RAT2
        help
          This setting is used to change the RAT 2 that the modem will use
          to connect to the network.
          This is not meant to be upstreamed as-is!
-        (3: LTE, 7: LTE Cat M1, 8: LTE Cat NB1, 9: GPRS / eGPRS)
+	 (3: LTE, 7: LTE Cat M1, 8: LTE Cat NB1, 9: GPRS / eGPRS)
 
+endif # MODEM_GSM_CONFIGURE_RAT
 
-endif # MODEM_GSM_CONFIGURE_URAT
-
-config MODEM_GSM_CONFIGURE_UBANDMASK
-       default y
+config MODEM_GSM_CONFIGURE_BAND_MASK
        bool "Enable support for selecting band masks"
        help
          Choose this setting to select the band masks for each RAT.
 
-if MODEM_GSM_CONFIGURE_UBANDMASK
+if MODEM_GSM_CONFIGURE_BAND_MASK
 
-config MODEM_GSM_UBANDMASK_LTE_CAT_M1
-       int "Bandmask for LTE-Cat-M1"
+config MODEM_GSM_CONFIGURE_BAND_MASK_LTE
+       bool "Enable support for selecting LTE Cat M1 band masks"
+       help
+         Choose this setting to select the band masks for each RAT.
+
+config MODEM_GSM_CONFIGURE_BAND_MASK_NB
+       bool "Enable support for selecting NB-IoT band masks"
+       depends on MODEM_GSM_CONFIGURE_BAND_MASK
+       help
+         Choose this setting to select the band masks for each RAT.
+
+config MODEM_GSM_BAND_MASK_LTE_0
+       int "Band mask for LTE-Cat-M1 1"
        default 526494
+       depends on MODEM_GSM_CONFIGURE_BAND_MASK_LTE
        help
          This setting is used to change the band mask for LTE-M1. It
          is a bitmask where bit 0 is band 1, etc.
-         This is not meant to be upstreamed as-is!
 
-config MODEM_GSM_UBANDMASK_NB1
-       int "Bandmask for LTE-NB1"
-       default 526494
+config MODEM_GSM_BAND_MASK_LTE_1
+       int "Band mask for LTE-Cat-M1 0"
+       default 0
+       depends on MODEM_GSM_CONFIGURE_BAND_MASK_LTE
        help
-         This setting is used to change the band mask for LTE-NB1. It
+         This setting is used to change the band mask for LTE-M1. It
          is a bitmask where bit 0 is band 1, etc.
-         This is not meant to be upstreamed as-is!
 
-endif # MODEM_GSM_CONFIGURE_UBANDMASK
+config MODEM_GSM_BAND_MASK_NB_0
+       int "Band mask for LTE-NB 0"
+       default 526494
+       depends on MODEM_GSM_CONFIGURE_BAND_MASK_NB
+       help
+         This setting is used to change the band mask forLTE-NB-IoT 0. It
+         is a bitmask where bit 0 is band 1, etc.
 
-endif # UBLOX_PPP_EXTENSIONS
+config MODEM_GSM_BAND_MASK_NB_1
+       int "Bandmask for LTE-NB-IoT 1"
+       default 0
+       depends on MODEM_GSM_CONFIGURE_BAND_MASK_NB
+       help
+         This setting is used to change the band mask for LTE-NB-IoT 1. It
+         is a bitmask where bit 0 is band 1, etc.
+
+endif # MODEM_GSM_CONFIGURE_BAND_MASK
+
+endif # MODEM_GSM_UBLOX_EXTENSIONS

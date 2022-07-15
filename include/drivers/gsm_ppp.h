@@ -14,6 +14,9 @@
 #define GSM_PPP_MDM_IMSI_LENGTH          16
 #define GSM_PPP_MDM_ICCID_LENGTH         32
 
+#define GSM_PPP_MDM_RAT_SIZE             3
+#define GSM_PPP_MDM_BAND_MASKS_SIZE      2
+
 struct gsm_ppp_modem_info {
 	char mdm_manufacturer[GSM_PPP_MDM_MANUFACTURER_LENGTH];
 	char mdm_model[GSM_PPP_MDM_MODEL_LENGTH];
@@ -28,6 +31,12 @@ struct gsm_ppp_modem_info {
 	int  mdm_rscp;
 	int  mdm_rsrp;
 	float  mdm_rsrq;
+#endif
+#if defined(CONFIG_MODEM_GSM_UBLOX_EXTENSIONS)
+	int  mdm_rat[GSM_PPP_MDM_RAT_SIZE];
+	int  mdm_lte_band_masks[GSM_PPP_MDM_BAND_MASKS_SIZE];
+	int  mdm_nb_band_masks[GSM_PPP_MDM_BAND_MASKS_SIZE];
+	int  mdm_gsm_band_masks[GSM_PPP_MDM_BAND_MASKS_SIZE];
 #endif
 };
 

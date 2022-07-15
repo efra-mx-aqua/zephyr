@@ -74,6 +74,12 @@ struct modem_context {
 	int      data_lac;
 	int      data_cellid;
 	int	 data_psm;
+#if defined(CONFIG_MODEM_GSM_UBLOX_EXTENSIONS)
+	int	 *data_rat;
+	int	 *data_lte_band_masks;
+	int	 *data_nb_band_masks;
+	int	 *data_gsm_band_masks;
+#endif
 #if defined(CONFIG_MODEM_CACHE_OPERATOR)
 	int   data_cached_operator;
 #endif
