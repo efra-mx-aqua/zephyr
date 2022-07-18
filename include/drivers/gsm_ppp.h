@@ -32,8 +32,8 @@ struct gsm_ppp_modem_info {
 	int  mdm_rsrp;
 	float  mdm_rsrq;
 #endif
-#if defined(CONFIG_MODEM_GSM_UBLOX_EXTENSIONS)
 	int  mdm_rat[GSM_PPP_MDM_RAT_SIZE];
+#if defined(CONFIG_MODEM_GSM_UBLOX_EXTENSIONS)
 	int  mdm_lte_band_masks[GSM_PPP_MDM_BAND_MASKS_SIZE];
 	int  mdm_nb_band_masks[GSM_PPP_MDM_BAND_MASKS_SIZE];
 	int  mdm_gsm_band_masks[GSM_PPP_MDM_BAND_MASKS_SIZE];

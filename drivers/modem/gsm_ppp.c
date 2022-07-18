@@ -57,6 +57,7 @@ LOG_MODULE_REGISTER(modem_gsm, CONFIG_MODEM_LOG_LEVEL);
 #endif
 
 enum modem_rat {
+	MODEM_RAT_INVALID = -1,
 	MODEM_RAT_GSM = 0,
 	MODEM_RAT_UMTS = 2,
 	MODEM_RAT_LTE = 3,
@@ -509,7 +510,18 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_cgreg)
 	return 0;
 }
 
-static const struct setup_cmd query_cellinfo_cmds[] = {
+static inline bool gsm_is_rat(struct gsm_modem *gsm, int rat)
+{
+	for (size_t i = 0; i < ARRAY_SIZE(gsm->minfo.mdm_rat); i++) {
+		if (gsm->minfo.mdm_rat[i] == rat) {
+			return true;
+		}
+	}
+	return false;
+}
+
+
+static struct setup_cmd query_cellinfo_cmds[] = {
 	SETUP_CMD_ARGS_MAX("AT+CREG?", "", on_cmd_atcmdinfo_creg, 2U, 5U, ","),
 	SETUP_CMD_ARGS_MAX("AT+CEREG?", "", on_cmd_atcmdinfo_cereg, 2U, 5U, ","),
 	SETUP_CMD_ARGS_MAX("AT+CGREG?", "", on_cmd_atcmdinfo_cgreg, 2U, 6U, ","),
@@ -528,6 +540,42 @@ static int gsm_query_cellinfo(struct gsm_modem *gsm)
 						  GSM_CMD_SETUP_TIMEOUT);
 	if (ret < 0) {
 		LOG_WRN("modem query for cell info returned %d", ret);
+	}
+
+	return ret;
+}
+
+static int gsm_setup_query_cellinfo(struct gsm_modem *gsm)
+{
+	struct setup_cmd setup_cmds[] = {
+		/* disable unsolicited network registration codes */
+		SETUP_CMD_NOHANDLE("AT+CREG=2"),
+		SETUP_CMD_NOHANDLE("AT+CEREG=2"),
+		SETUP_CMD_NOHANDLE("AT+CGREG=2"),
+	};
+	int rats[] = {
+		MODEM_RAT_GSM,
+		MODEM_RAT_NBIOT,
+		MODEM_RAT_GPRS
+	};
+	int ret = 0;
+	bool ignore;
+
+	__ASSERT_NO_MSG(ARRAY_SIZE(query_cellinfo_cmds) > ARRAY_SIZE(rats));
+
+	for (size_t i = 0; i < ARRAY_SIZE(rats); i++) {
+		ignore = !gsm_is_rat(gsm, rats[i]);
+		setup_cmds[i].handle_cmd.ignore = ignore;
+		query_cellinfo_cmds[i].handle_cmd.ignore = ignore;
+	}
+	ret = modem_cmd_handler_setup_cmds_nolock(&gsm->context.iface,
+						  &gsm->context.cmd_handler,
+						  setup_cmds,
+						  ARRAY_SIZE(setup_cmds),
+						  &gsm->sem_response,
+						  GSM_CMD_SETUP_TIMEOUT);
+	if (ret < 0) {
+		LOG_DBG("modem query for cell info returned %d", ret);
 	}
 
 	return ret;
@@ -982,11 +1030,11 @@ static int gsm_setup_mnoprof(struct gsm_modem *gsm)
 }
 #endif
 
-#ifdef CONFIG_MODEM_GSM_CONFIGURE_RAT
+#ifdef CONFIG_MODEM_GSM_UBLOX_EXTENSIONS
 /* Handler: +URAT: <rat1>,[...] */
 MODEM_CMD_DEFINE(on_cmd_atcmdinfo_urat)
 {
-	memset(gsm.minfo.mdm_rat, 0, sizeof(gsm.minfo.mdm_rat));
+	memset(gsm.minfo.mdm_rat, MODEM_RAT_INVALID, sizeof(gsm.minfo.mdm_rat));
 	for (int i = 0; i < argc; i++) {
 		gsm.minfo.mdm_rat[i] = atoi(argv[i]);
 		LOG_INF("RAT[%d]: %u", i, gsm.minfo.mdm_rat[i]);
@@ -1022,8 +1070,6 @@ static int gsm_setup_rat(struct gsm_modem *gsm)
 #elif CONFIG_MODEM_GSM_CONFIGURE_RAT1
 	sprintf(urat_cmd, "AT+URAT=%1u", CONFIG_MODEM_GSM_RAT1);
 	changed = changed && (gsm->minfo.mdm_rat[0] == CONFIG_MODEM_GSM_RAT1);
-#else
-	changed = false;
 #endif
 
 	if (changed) {
@@ -1139,8 +1185,6 @@ static int gsm_setup_band_mask(struct gsm_modem *gsm)
 
 #ifdef CONFIG_MODEM_GSM_CONFIGURE_BAND_MASK_LTE
 	/* For LTE Cat M1 */
-	bool lte_active = gsm->minfo.mdm_rat[0] == MODEM_RAT_LTE_CAT_M1 ||
-			  gsm->minfo.mdm_rat[1] == MODEM_RAT_LTE_CAT_M1;
 	struct setup_cmd lte_set_cmd =
 		SETUP_CMD_NOHANDLE("AT+UBANDMASK=0,"
 				   STRINGIFY(CONFIG_MODEM_GSM_BAND_MASK_LTE_0)","
@@ -1148,7 +1192,7 @@ static int gsm_setup_band_mask(struct gsm_modem *gsm)
 
 	if (((gsm->minfo.mdm_lte_band_masks[0] != CONFIG_MODEM_GSM_BAND_MASK_LTE_0) ||
 	     (gsm->minfo.mdm_lte_band_masks[1] != CONFIG_MODEM_GSM_BAND_MASK_LTE_1))
-	    && lte_active) {
+	    && gsm_is_rat(gsm, MODEM_RAT_LTE_CAT_M1)) {
 		LOG_WRN("Setting LTE-Cat M1 bandmask");
 		ret = modem_cmd_handler_setup_cmds_nolock(&gsm->context.iface,
 							  &gsm->context.cmd_handler,
@@ -1173,7 +1217,7 @@ static int gsm_setup_band_mask(struct gsm_modem *gsm)
 	/* For NB-iot */
 	if (((gsm->minfo.mdm_nb_band_masks[0] != CONFIG_MODEM_GSM_BAND_MASK_NB_0) ||
 	     (gsm->minfo.mdm_nb_band_masks[1] != CONFIG_MODEM_GSM_BAND_MASK_NB_1))
-	    && nbiot_active) {
+	    && gsm_is_rat(gsm, MODEM_RAT_NBIOT)) {
 		LOG_WRN("Setting NB bandmask");
 		ret = modem_cmd_handler_setup_cmds_nolock(&gsm->context.iface,
 							  &gsm->context.cmd_handler,
@@ -1261,19 +1305,19 @@ static int gsm_modem_setup(struct gsm_modem *gsm)
 		return ret;
 	}
 
-#ifdef CONFIG_MODEM_GSM_CONFIGURE_RAT
+	ret = gsm_setup_psm(gsm);
+	if (ret < 0) {
+		LOG_WRN("gsm_setup_psm returned %d", ret);
+		return ret;
+	}
+
+#ifdef CONFIG_MODEM_GSM_UBLOX_EXTENSIONS
 	ret = gsm_setup_rat(gsm);
 	if (ret < 0) {
 		LOG_WRN("gsm_setup_rat returned %d", ret);
 		return ret;
 	}
 #endif
-
-	ret = gsm_setup_psm(gsm);
-	if (ret < 0) {
-		LOG_WRN("gsm_setup_psm returned %d", ret);
-		return ret;
-	}
 
 #ifdef CONFIG_MODEM_GSM_CONFIGURE_BAND_MASK
 	ret = gsm_setup_band_mask(gsm);
@@ -1289,6 +1333,8 @@ static int gsm_modem_setup(struct gsm_modem *gsm)
 			gsm->req_reset = false;
 		}
 		ret = -EAGAIN;
+	} else if (!ret){
+		ret = gsm_setup_query_cellinfo(gsm);
 	}
 
 	return ret;
@@ -2002,11 +2048,13 @@ static int gsm_init(const struct device *dev)
 	gsm->context.data_rsrp = &gsm->minfo.mdm_rsrp;
 	gsm->context.data_rsrq = &gsm->minfo.mdm_rsrq;
 #endif
-#if defined(CONFIG_MODEM_GSM_UBLOX_EXTENSIONS)
 	gsm->context.data_rat = gsm->minfo.mdm_rat;
+#if defined(CONFIG_MODEM_GSM_UBLOX_EXTENSIONS)
 	gsm->context.data_lte_band_masks = gsm->minfo.mdm_lte_band_masks;
 	gsm->context.data_nb_band_masks = gsm->minfo.mdm_nb_band_masks;
 	gsm->context.data_gsm_band_masks = gsm->minfo.mdm_gsm_band_masks;
+#else
+	gsm->minfo.mdm_rat[0] = MODEM_RAT_GSM;
 #endif
 	gsm->context.attach_max_retries = CONFIG_MODEM_GSM_ATTACH_TIMEOUT *
 				MSEC_PER_SEC / GSM_ATTACH_RETRY_DELAY_MSEC;
