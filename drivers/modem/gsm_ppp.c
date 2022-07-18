@@ -255,16 +255,18 @@ static int unquoted_atoi(const char *s, int base)
 MODEM_CMD_DEFINE(on_cmd_atcmdinfo_cops)
 {
 	uint16_t operator;
-	if (argc >= 3) {
-		operator = unquoted_atoi(argv[2], 10);
-		LOG_INF("operator: %u", operator);
-		gsm.context.data_operator = operator;
-
+	if (argc > 0) {
 		if (unquoted_atoi(argv[0], 10) == 0) {
 			gsm.context.is_automatic_oper = true;
 		} else {
 			gsm.context.is_automatic_oper = false;
 		}
+	}
+	if (argc > 2) {
+		operator = unquoted_atoi(argv[2], 10);
+		LOG_INF("operator: %u", operator);
+		gsm.context.data_operator = operator;
+
 
 #if defined(CONFIG_MODEM_CACHE_OPERATOR)
 		/* Fail-safe against operator format being wrong */
