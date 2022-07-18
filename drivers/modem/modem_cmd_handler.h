@@ -80,6 +80,7 @@ struct modem_cmd {
 	uint16_t arg_count_min;
 	uint16_t arg_count_max;
 	bool direct;
+	bool ignore;
 };
 
 #define SETUP_CMD(cmd_send_, match_cmd_, func_cb_, num_param_, delim_) { \

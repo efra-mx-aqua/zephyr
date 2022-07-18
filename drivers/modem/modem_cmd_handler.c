@@ -589,6 +589,10 @@ int modem_cmd_handler_setup_cmds_nolock(struct modem_iface *iface,
 	int ret = 0, i;
 
 	for (i = 0; i < cmds_len; i++) {
+		if (cmds[i].handle_cmd.ignore) {
+			continue;
+		}
+
 		if (i) {
 			k_sleep(K_MSEC(50));
 		}
