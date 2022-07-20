@@ -105,16 +105,23 @@ config MODEM_GSM_AUTO_COPS_TIMEOUT
 	  operator is received. This setting dictates how much time in
 	  seconds we give the modem before giving up.
 
+
+config MODEM_GSM_RSSI_POLLING
+	bool "Configure RSSI polling period (in seconds)"
+	default y
+	help
+	  This settings is used to enable the RSSI polling
+
 config MODEM_GSM_RSSI_POLLING_PERIOD
 	int "Configure RSSI polling period (in seconds)"
 	default 30
-	depends on MODEM_GSM_ENABLE_CSQ_RSSI || MODEM_GSM_ENABLE_CESQ_RSSI
+	depends on MODEM_GSM_RSSI_POLLING
 	help
 	  This settings is used to configure the period of RSSI polling
 
 config MODEM_GSM_ENABLE_CSQ_RSSI
 	bool "Enable +CSQ RSSI measurement"
-	default y
+	default y if MODEM_GSM_RSSI_POLLING
 	help
 	   If this is enabled, the RSSI value is read from the modem with
 	   +CESQ. Otherwise only RSSI value is read with +CSQ from the

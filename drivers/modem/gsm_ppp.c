@@ -610,13 +610,15 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_cesq)
 	if (rxlev >= 0 && rxlev <= 63) {
 		gsm.minfo.mdm_rssi = -110 + (rxlev - 1);
 		LOG_INF("RSSI: %d", gsm.minfo.mdm_rssi);
-	} else if (!IS_ENABLED(CONFIG_MODEM_GSM_ENABLE_CSQ_RSSI)) {
+	} else if (!IS_ENABLED(CONFIG_MODEM_GSM_ENABLE_CSQ_RSSI) &&
+		   gsm.minfo.mdm_rssi != GSM_RSSI_INVALID) {
 		gsm.minfo.mdm_rssi = GSM_RSSI_INVALID;
 		LOG_INF("RSSI not known");
 	} else {
 		/* preserve the RSSI */
 	}
 
+	k_sem_give(&gsm.sem_response);
 	return 0;
 }
 #endif
@@ -633,7 +635,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_csq)
 		    (!IS_ENABLED(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI) ||
 		     GSM_RSSI_INVALID == gsm.minfo.mdm_rssi)) {
 			rssi = -113 + (rssi * 2);
-		} else if (!IS_ENABLED(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI)){
+		} else if (!IS_ENABLED(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI)) {
 			gsm.minfo.mdm_rssi = rssi;
 			rssi = GSM_RSSI_INVALID;
 		} else {
@@ -831,15 +833,6 @@ static void query_rssi(struct gsm_modem *gsm, bool lock)
 {
 	int ret;
 
-#if defined(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI)
-	ret = modem_cmd_send_ext(&gsm->context.iface, &gsm->context.cmd_handler,
-				 &read_rssi_cesq_cmd, 1,
-				 "AT+CESQ", &gsm->sem_response, GSM_CMD_SETUP_TIMEOUT,
-				 lock ? 0 : MODEM_NO_TX_LOCK);
-	if (ret < 0 && !IS_ENABLED(CONFIG_MODEM_GSM_ENABLE_CSQ_RSSI)) {
-		LOG_DBG("No answer to RSSI(CESQ) readout, %s", "ignoring...");
-	}
-#endif
 #if defined(CONFIG_MODEM_GSM_ENABLE_CSQ_RSSI)
 	ret = modem_cmd_send_ext(&gsm->context.iface, &gsm->context.cmd_handler,
 				 &read_rssi_csq_cmd, 1,
@@ -847,6 +840,15 @@ static void query_rssi(struct gsm_modem *gsm, bool lock)
 				 lock ? 0 : MODEM_NO_TX_LOCK);
 	if (ret < 0 && !IS_ENABLED(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI)) {
 		LOG_DBG("No answer to RSSI(CSQ) readout, %s", "ignoring...");
+	}
+#endif
+#if defined(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI)
+	ret = modem_cmd_send_ext(&gsm->context.iface, &gsm->context.cmd_handler,
+				 &read_rssi_cesq_cmd, 1,
+				 "AT+CESQ", &gsm->sem_response, GSM_CMD_SETUP_TIMEOUT,
+				 lock ? 0 : MODEM_NO_TX_LOCK);
+	if (ret < 0 && !IS_ENABLED(CONFIG_MODEM_GSM_ENABLE_CSQ_RSSI)) {
+		LOG_DBG("No answer to RSSI(CESQ) readout, %s", "ignoring...");
 	}
 #endif
 
@@ -880,8 +882,10 @@ static void rssi_handler(struct k_work *work)
 #if defined(CONFIG_MODEM_CELL_INFO)
 	(void)gsm_query_cellinfo(gsm);
 #endif
+#if defined(MODEM_GSM_RSSI_POLLING)
 	(void)gsm_work_reschedule(&gsm->rssi_work_handle,
 				  K_SECONDS(CONFIG_MODEM_GSM_RSSI_POLLING_PERIOD));
+#endif
 	gsm_ppp_unlock(gsm);
 }
 
@@ -1562,8 +1566,12 @@ attaching:
 			}
 		}
 		modem_cmd_handler_tx_unlock(&gsm->context.cmd_handler);
+#if defined(MODEM_GSM_RSSI_POLLING)
 		(void)gsm_work_reschedule(&gsm->rssi_work_handle,
 					  K_SECONDS(CONFIG_MODEM_GSM_RSSI_POLLING_PERIOD));
+else
+		query_rssi_lock(&gsm);
+#endif
 	}
 
 unlock:
