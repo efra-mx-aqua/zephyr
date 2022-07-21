@@ -706,6 +706,32 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_attached)
 	return 0;
 }
 
+static int gsm_check_com(struct gsm_modem *gsm, bool lock)
+{
+	int ret = -1;
+	int counter = 0;
+
+	while (counter++ < GSM_DETECTION_RETRIES && ret < 0) {
+		k_sleep(K_SECONDS(2));
+		ret = modem_cmd_send_ext(&gsm->context.iface,
+					 &gsm->context.cmd_handler,
+					 &response_cmds[0],
+					 ARRAY_SIZE(response_cmds),
+					 "AT", &gsm->sem_response,
+					 GSM_CMD_AT_TIMEOUT,
+					 MODEM_NO_TX_LOCK & !lock);
+		if (ret < 0 && ret != -ETIMEDOUT) {
+			break;
+		}
+	}
+
+	if (ret < 0) {
+		LOG_ERR("MODEM WAIT LOOP ERROR: %d", ret);
+		return -ENODEV;
+	}
+	return 0;
+}
+
 
 static const struct modem_cmd check_attached_cmd =
 	MODEM_CMD("+CGATT:", on_cmd_atcmdinfo_attached, 1U, ",");
@@ -1373,12 +1399,7 @@ static void gsm_finalize_connection(struct k_work *work)
 	}
 
 	if (IS_ENABLED(CONFIG_GSM_MUX)) {
-		ret = modem_cmd_send_nolock(&gsm->context.iface,
-					    &gsm->context.cmd_handler,
-					    &response_cmds[0],
-					    ARRAY_SIZE(response_cmds),
-					    "AT", &gsm->sem_response,
-					    GSM_CMD_AT_TIMEOUT);
+		ret = gsm_check_com(gsm, false);
 		if (ret < 0) {
 			LOG_ERR("%s returned %d, %s", "AT", ret, "retrying...");
 			(void)gsm_work_reschedule(&gsm->gsm_configure_work, GSM_RETRY_DELAY);
@@ -1788,12 +1809,7 @@ static void gsm_configure(struct k_work *work)
 		gsm->modem_on_cb(gsm->dev, gsm->user_data);
 	}
 
-	ret = modem_cmd_send_nolock(&gsm->context.iface,
-				    &gsm->context.cmd_handler,
-				    &response_cmds[0],
-				    ARRAY_SIZE(response_cmds),
-				    "AT", &gsm->sem_response,
-				    GSM_CMD_AT_TIMEOUT);
+	ret = gsm_check_com(gsm, false);
 	if (ret < 0) {
 		LOG_DBG("modem not ready %d", ret);
 		goto reschedule;
