@@ -62,6 +62,8 @@ static const struct gpio_dt_spec modem_pins[] = {
 static struct gpio_callback vint_cb;
 static int reset_asserted = 0;
 static int v_int = -1;
+static struct k_mutex power_lock;
+
 
 
 /*----------------------------------------------------------------------------*/
@@ -102,6 +104,16 @@ static void pin_config(void)
 #if DT_NODE_HAS_PROP(DT_NODELABEL(ublox_mdm), mdm_dtr_gpios)
 	gpio_pin_configure_dt(&modem_pins[MDM_DTR], GPIO_OUTPUT);
 #endif
+}
+
+static inline void modem_power_lock(void)
+{
+	k_mutex_lock(&power_lock, K_FOREVER);
+}
+
+static inline void modem_power_unlock(void)
+{
+	k_mutex_unlock(&power_lock);
 }
 
 /* Control the 'pwron' pin */
@@ -164,10 +176,15 @@ int ublox_sara_r4_pwr_on(void)
 {
 	int ret = 0;
 
+	k_mutex_lock(&power_lock, K_FOREVER);
+
 	if (gpio_pin_get_dt(&modem_pins[MDM_VINT]) == 1) {
 		LOG_DBG("modem already powered ON");
-		return 0;
+		goto unlock;
 	}
+
+	LOG_DBG("modem ON");
+
 	if (reset_asserted) {
 		pin_reset_control(0);
 		k_sleep(K_SECONDS(3));
@@ -181,6 +198,8 @@ int ublox_sara_r4_pwr_on(void)
 		k_sleep(K_MSEC(500));
 	}
 
+unlock:
+	modem_power_unlock();
 	return ret;
 }
 
@@ -188,10 +207,14 @@ int ublox_sara_r4_pwr_off(void)
 {
 	int ret = 0;
 
+	modem_power_lock();
+
 	if (gpio_pin_get_dt(&modem_pins[MDM_VINT]) == 0) {
 		LOG_DBG("modem already powered OFF");
-		return 0;
+		goto unlock;
 	}
+
+	LOG_DBG("modem OFF");
 
 	pin_pwron_control(0);
 	ret = vint_wait(0, K_SECONDS(30));
@@ -202,6 +225,8 @@ int ublox_sara_r4_pwr_off(void)
 
 	pin_reset_control(1);
 
+unlock:
+	modem_power_unlock();
 	return ret;
 }
 
@@ -209,8 +234,9 @@ int ublox_sara_r4_pwr_off_force(void)
 {
 	int ret = -1;
 
-	pin_reset_control(1);
+	modem_power_lock();
 
+	pin_reset_control(1);
 	pin_pwron_control(0);
 	k_sleep(K_MSEC(500));
 	pin_pwron_control(0);
@@ -220,6 +246,7 @@ int ublox_sara_r4_pwr_off_force(void)
 		k_sleep(K_MSEC(500));
 	}
 
+	modem_power_unlock();
 	return ret;
 }
 
@@ -242,6 +269,8 @@ int ublox_sara_r4_pwr_wait(int on, k_timeout_t timeout)
 static int ublox_sara_r4_pwr_init(const struct device *dev)
 {
 	ARG_UNUSED(dev);
+
+	k_mutex_init(&power_lock);
 
 	/* Make sure modem is powered off at boot for maximum determinism */
 
