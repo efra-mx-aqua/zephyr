@@ -1875,12 +1875,11 @@ void gsm_ppp_start(const struct device *dev)
 	int ret;
 	struct gsm_modem *gsm = dev->data;
 
+	gsm_ppp_lock(gsm);
 	if (gsm->running) {
 		LOG_INF("GSM PPP already running");
-		return;
+		goto unlock;
 	}
-
-	gsm_ppp_lock(gsm);
 
 	LOG_INF("GSM PPP start");
 
@@ -1913,7 +1912,7 @@ void gsm_ppp_stop(const struct device *dev)
 
 	if (!gsm->running) {
 		LOG_INF("GSM PPP not running");
-		return;
+		goto unlock;;
 	}
 
 	LOG_INF("GSM PPP start");
@@ -1922,8 +1921,6 @@ void gsm_ppp_stop(const struct device *dev)
 	if (IS_ENABLED(CONFIG_GSM_MUX)) {
 		(void)k_work_cancel_delayable_sync(&gsm->rssi_work_handle, &work_sync);
 	}
-
-	gsm_ppp_lock(gsm);
 
 	/* wait for the interface to be properly down */
 	if (net_if_is_up(iface)) {
@@ -1952,9 +1949,9 @@ void gsm_ppp_stop(const struct device *dev)
 	gsm->context.data_eps_reg = GSM_EPS_NET_INIT;
 	gsm->context.data_gprs_reg = GSM_GPRS_NET_INIT;
 
-	LOG_INF("GSM PPP stopped");
-
+unlock:
 	gsm_ppp_unlock(gsm);
+	LOG_INF("GSM PPP stopped");
 }
 
 void gsm_ppp_register_modem_power_callback(const struct device *dev,
