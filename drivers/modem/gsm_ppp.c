@@ -41,7 +41,7 @@ LOG_MODULE_REGISTER(modem_gsm, CONFIG_MODEM_LOG_LEVEL);
 #define GSM_REGISTER_DELAY_MSEC         1000
 #define GSM_RETRY_DELAY                 K_SECONDS(1)
 #define GSM_REGISTER_DELAY_MSEC         1000
-#define GSM_DETECTION_RETRIES           50
+#define GSM_DETECTION_RETRIES           10
 #define GSM_AUTO_COPS_DELAY_MSEC     	5000
 #define GSM_RETRY_DELAY			K_SECONDS(1)
 
@@ -135,6 +135,7 @@ static struct gsm_modem {
 
 	struct modem_iface_uart_data gsm_data;
 	struct k_work_delayable gsm_configure_work;
+	struct k_work_delayable gsm_fail_work;
 	char gsm_rx_rb_buf[GSM_RX_RINGBUF_SIZE];
 	k_tid_t gsm_rx_tid;
 
@@ -157,6 +158,7 @@ static struct gsm_modem {
 	int rssi_retries;
 	int attach_retries;
 	int auto_cops_retries;
+	int comm_retries;
 	bool attached : 1;
 	bool running : 1;
 	bool modem_info_queried : 1;
@@ -1370,6 +1372,14 @@ static int gsm_modem_setup(struct gsm_modem *gsm)
 	return ret;
 }
 
+static void gsm_finalize_after_failure(struct k_work *work)
+{
+	struct gsm_modem *gsm = CONTAINER_OF(work, struct gsm_modem,
+					     gsm_fail_work);
+	LOG_DBG("Failure");
+	gsm_ppp_stop(gsm->dev);
+}
+
 static void gsm_finalize_connection(struct k_work *work)
 {
 	int ret = 0;
@@ -1401,9 +1411,8 @@ static void gsm_finalize_connection(struct k_work *work)
 	if (IS_ENABLED(CONFIG_GSM_MUX)) {
 		ret = gsm_check_com(gsm, false);
 		if (ret < 0) {
-			LOG_ERR("%s returned %d, %s", "AT", ret, "retrying...");
-			(void)gsm_work_reschedule(&gsm->gsm_configure_work, GSM_RETRY_DELAY);
-			goto unlock;
+			LOG_ERR("Modem failed to responde");
+			goto fail;
 		}
 	}
 
@@ -1581,6 +1590,7 @@ attaching:
 				GSM_CMD_AT_TIMEOUT);
 			if (ret < 0) {
 				LOG_WRN("%s returned %d, %s", "AT", ret, "iface failed");
+				goto fail;
 			} else {
 				LOG_INF("AT channel %d connected to %s",
 					DLCI_AT, gsm->at_dev->name);
@@ -1597,6 +1607,12 @@ else
 
 unlock:
 	gsm_ppp_unlock(gsm);
+	return;
+fail:
+	k_work_init_delayable(&gsm->gsm_fail_work,
+				gsm_finalize_after_failure);
+	(void)gsm_work_reschedule(&gsm->gsm_fail_work, K_NO_WAIT);
+	goto unlock;
 }
 
 static int mux_enable(struct gsm_modem *gsm)
@@ -1812,7 +1828,7 @@ static void gsm_configure(struct k_work *work)
 	ret = gsm_check_com(gsm, false);
 	if (ret < 0) {
 		LOG_DBG("modem not ready %d", ret);
-		goto reschedule;
+		goto fail;
 	}
 
 	if (IS_ENABLED(CONFIG_GSM_MUX)) {
@@ -1832,8 +1848,26 @@ static void gsm_configure(struct k_work *work)
 	}
 
 reschedule:
-	(void)gsm_work_reschedule(&gsm->gsm_configure_work, K_NO_WAIT);
+	if (!gsm->comm_retries) {
+		gsm->comm_retries = GSM_DETECTION_RETRIES;
+	} else {
+		gsm->comm_retries--;
+	}
+
+	if (gsm->comm_retries > 0) {
+		(void)gsm_work_reschedule(&gsm->gsm_configure_work, K_NO_WAIT);
+	} else {
+		goto fail;
+	}
+
+unlock:
 	gsm_ppp_unlock(gsm);
+	return;
+fail:
+	k_work_init_delayable(&gsm->gsm_fail_work,
+				gsm_finalize_after_failure);
+	k_work_schedule(&gsm->gsm_fail_work, K_NO_WAIT);
+	goto unlock;
 }
 
 void gsm_ppp_start(const struct device *dev)
@@ -1856,6 +1890,7 @@ void gsm_ppp_start(const struct device *dev)
 
 	LOG_INF("GSM PPP start");
 
+	gsm->comm_retries = 0;
 	k_work_init_delayable(&gsm->gsm_configure_work, gsm_configure);
 	(void)gsm_work_reschedule(&gsm->gsm_configure_work, K_NO_WAIT);
 
@@ -1941,7 +1976,6 @@ int gsm_ppp_detect(const struct device *dev)
 {
 	struct gsm_modem *gsm = dev->data;
 	int ret = -1;
-	int counter = 0;
 
 	/* Re-init underlying UART comms */
 	ret = modem_iface_uart_init_dev(&gsm->context.iface,
@@ -1953,19 +1987,7 @@ int gsm_ppp_detect(const struct device *dev)
 
 	LOG_DBG("Detecting  modem %p ...", gsm);
 
-	while (counter++ < GSM_DETECTION_RETRIES && ret < 0) {
-		k_sleep(K_SECONDS(2));
-		ret = modem_cmd_send_nolock(&gsm->context.iface,
-					    &gsm->context.cmd_handler,
-					    &response_cmds[0],
-					    ARRAY_SIZE(response_cmds),
-					    "AT", &gsm->sem_response,
-					    GSM_CMD_AT_TIMEOUT);
-		if (ret < 0 && ret != -ETIMEDOUT) {
-			break;
-		}
-	}
-
+	ret = gsm_check_com(gsm, false);
 	if (ret < 0) {
 		LOG_ERR("MODEM WAIT LOOP ERROR: %d", ret);
 		return -ENODEV;
