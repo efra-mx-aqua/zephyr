@@ -45,6 +45,7 @@ struct device;
 typedef void (*gsm_modem_power_cb)(const struct device *, void *);
 
 void gsm_ppp_start(const struct device *dev);
+int gsm_ppp_wait_until_ready(const struct device *dev, k_timeout_t timeout);
 void gsm_ppp_stop(const struct device *dev);
 bool gsm_ppp_is_running(const struct device *dev);
 
