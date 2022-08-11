@@ -1910,12 +1910,12 @@ void gsm_ppp_stop(const struct device *dev)
 	struct net_if *iface = gsm->iface;
 	struct k_work_sync work_sync;
 
+	LOG_INF("GSM PPP stop");
+	gsm_ppp_lock(gsm);
 	if (!gsm->running) {
 		LOG_INF("GSM PPP not running");
 		goto unlock;;
 	}
-
-	LOG_INF("GSM PPP start");
 
 	(void)k_work_cancel_delayable_sync(&gsm->gsm_configure_work, &work_sync);
 	if (IS_ENABLED(CONFIG_GSM_MUX)) {
@@ -1951,7 +1951,7 @@ void gsm_ppp_stop(const struct device *dev)
 
 unlock:
 	gsm_ppp_unlock(gsm);
-	LOG_INF("GSM PPP stopped");
+	LOG_DBG("GSM PPP stopped");
 }
 
 void gsm_ppp_register_modem_power_callback(const struct device *dev,
