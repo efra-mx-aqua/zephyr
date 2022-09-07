@@ -567,6 +567,7 @@ static int dtls_rx(void *ctx, unsigned char *buf, size_t len,
 		if (tls_ctx->dtls_peer_addrlen == 0) {
 			/* Only allow to store peer address for DTLS servers. */
 			if (tls_ctx->options.role == MBEDTLS_SSL_IS_SERVER) {
+#ifdef CONFIG_MBEDTLS_DTLS_SERVER
 				dtls_peer_address_set(tls_ctx, &addr, addrlen);
 
 				err = mbedtls_ssl_set_client_transport_id(
@@ -575,6 +576,9 @@ static int dtls_rx(void *ctx, unsigned char *buf, size_t len,
 				if (err < 0) {
 					return err;
 				}
+#else
+				return -EOPNOTSUPP;
+#endif
 			} else {
 				/* For clients it's incorrect to receive when
 				 * no peer has been set up.
@@ -948,6 +952,7 @@ static int tls_mbedtls_init(struct tls_context *context, bool is_server)
 
 		/* Configure cookie for DTLS server */
 		if (role == MBEDTLS_SSL_IS_SERVER) {
+#ifdef CONFIG_MBEDTLS_DTLS_SERVER
 			ret = mbedtls_ssl_cookie_setup(&context->cookie,
 						       tls_ctr_drbg_random,
 						       NULL);
@@ -963,6 +968,9 @@ static int tls_mbedtls_init(struct tls_context *context, bool is_server)
 			mbedtls_ssl_conf_read_timeout(
 					&context->config,
 					CONFIG_NET_SOCKETS_DTLS_TIMEOUT);
+#else
+			return -EOPNOTSUPP;
+#endif
 		}
 	}
 #endif /* CONFIG_NET_SOCKETS_ENABLE_DTLS */

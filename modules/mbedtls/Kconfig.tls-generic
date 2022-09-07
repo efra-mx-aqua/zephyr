@@ -33,6 +33,16 @@ config MBEDTLS_DTLS
 	bool "Enable support for DTLS"
 	depends on MBEDTLS_TLS_VERSION_1_1 || MBEDTLS_TLS_VERSION_1_2
 
+config MBEDTLS_DTLS_CLIENT
+	bool "Enable support for DTLS client"
+	default y
+	depends on MBEDTLS_TLS_VERSION_1_1 || MBEDTLS_TLS_VERSION_1_2
+
+config MBEDTLS_DTLS_SERVER
+	bool "Enable support for DTLS server"
+	default y
+	depends on MBEDTLS_TLS_VERSION_1_1 || MBEDTLS_TLS_VERSION_1_2
+
 config MBEDTLS_SSL_EXPORT_KEYS
 	bool "Enable support for exporting SSL key block and master secret"
 	depends on MBEDTLS_TLS_VERSION_1_0 || MBEDTLS_TLS_VERSION_1_1 || MBEDTLS_TLS_VERSION_1_2

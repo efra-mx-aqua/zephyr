@@ -55,9 +55,15 @@
 
 /* Modules required for TLS */
 #define MBEDTLS_SSL_TLS_C
-#define MBEDTLS_SSL_SRV_C
-#define MBEDTLS_SSL_CLI_C
 #define MBEDTLS_SSL_MAX_FRAGMENT_LENGTH
+
+#if defined(CONFIG_MBEDTLS_DTLS_SERVER)
+#define MBEDTLS_SSL_SRV_C
+#endif
+
+#if defined(CONFIG_MBEDTLS_DTLS_CLIENT)
+#define MBEDTLS_SSL_CLI_C
+#endif
 
 #endif
 
