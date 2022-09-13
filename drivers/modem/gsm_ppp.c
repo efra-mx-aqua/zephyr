@@ -625,7 +625,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_cesq)
 	}
 	if (rsrq >= 0 && rsrq <= 34) {
 		gsm.minfo.mdm_rsrq = -20.0f + rsrq / 2.0f;
-		LOG_INF("RSRQ: %d.%d", (int)gsm.minfo.mdm_rsrq, 
+		LOG_INF("RSRQ: %d.%d", (int)gsm.minfo.mdm_rsrq,
 			abs(gsm.minfo.mdm_rsrq * 10) % 10 );
 	} else {
 		gsm.minfo.mdm_rsrq = GSM_RSSI_INVALID;
@@ -1946,7 +1946,7 @@ void gsm_ppp_stop(const struct device *dev)
 		}
 
 		if (modem_cmd_handler_tx_lock(&gsm->context.cmd_handler,
-					      GSM_CMD_LOCK_TIMEOUT)) {
+								GSM_CMD_LOCK_TIMEOUT) < 0) {
 			LOG_WRN("Failed locking modem cmds!");
 		}
 	}
