@@ -319,6 +319,9 @@ enum sensor_attribute {
 	 */
 	SENSOR_ATTR_PRIV_START = SENSOR_ATTR_COMMON_COUNT,
 
+	/** sensor minimum range, in SI units */
+	SENSOR_ATTR_MINIMUM_RANGE,
+
 	/**
 	 * Maximum value describing a sensor attribute type.
 	 */
