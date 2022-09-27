@@ -223,7 +223,7 @@ int ublox_sara_r4_pwr_off(void)
 		k_sleep(K_MSEC(500));
 	}
 
-	pin_reset_control(1);
+	pin_reset_control(0);
 
 unlock:
 	modem_power_unlock();
@@ -237,32 +237,13 @@ int ublox_sara_r4_pwr_off_force(void)
 	modem_power_lock();
 
 	pin_reset_control(1);
-	pin_pwron_control(0);
-	k_sleep(K_MSEC(500));
-	pin_pwron_control(0);
 	ret = vint_wait(0, K_SECONDS(30));
 	if (ret) {
 		LOG_DBG("vint is not low!");
 		k_sleep(K_MSEC(500));
 	}
-
+	pin_reset_control(0);
 	modem_power_unlock();
-	return ret;
-}
-
-int ublox_sara_r4_pwr_wait(int on, k_timeout_t timeout)
-{
-	int ret = 0;
-
-	if (on) {
-		ret = ublox_sara_r4_pwr_on();
-	} else {
-		ret = ublox_sara_r4_pwr_off();
-	}
-	if (ret > 0) {
-		ret = vint_wait(on, timeout);
-	}
-
 	return ret;
 }
 
@@ -279,9 +260,7 @@ static int ublox_sara_r4_pwr_init(const struct device *dev)
 	setup_vint_isr();
 	enable_vint_isr();
 
-	if (ublox_sara_r4_pwr_off()) {
-		ublox_sara_r4_pwr_off_force();
-	}
+	ublox_sara_r4_pwr_off_force();
 	ublox_sara_r4_pwr_on();
 
 	return 0;
