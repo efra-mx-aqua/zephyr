@@ -590,11 +590,12 @@ static int gsm_setup_query_cellinfo(struct gsm_modem *gsm)
  */
 MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_cesq)
 {
-	int rsrp, rscp, rxlev;
+	int rsrp, rscp, rxlev, rsrq;
 
 	rsrp = ATOI(argv[5], 0, "rsrp");
 	rscp = ATOI(argv[2], 0, "rscp");
 	rxlev = ATOI(argv[0], 0, "rxlev");
+	rsrq = ATOI(argv[4], 0, "rsrq");
 
 	if (rsrp >= 0 && rsrp <= 97) {
 		gsm.minfo.mdm_rsrp = -140 + (rsrp - 1);
@@ -619,6 +620,14 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_cesq)
 		LOG_INF("RSSI not known");
 	} else {
 		/* preserve the RSSI */
+	}
+	if (rsrq >= 0 && rsrq <= 34) {
+		gsm.minfo.mdm_rsrq = -20.0f + rsrq / 2.0f;
+		LOG_INF("RSRQ: %d.%d", (int)gsm.minfo.mdm_rsrq, 
+			abs(gsm.minfo.mdm_rsrq * 10) % 10 );
+	} else {
+		gsm.minfo.mdm_rsrq = GSM_RSSI_INVALID;
+		LOG_INF("RSRQ not known");
 	}
 
 	k_sem_give(&gsm.sem_response);
@@ -911,7 +920,7 @@ static void rssi_handler(struct k_work *work)
 #if defined(CONFIG_MODEM_CELL_INFO)
 	(void)gsm_query_cellinfo(gsm);
 #endif
-#if defined(MODEM_GSM_RSSI_POLLING)
+#if defined(CONFIG_MODEM_GSM_RSSI_POLLING)
 	(void)gsm_work_reschedule(&gsm->rssi_work_handle,
 				  K_SECONDS(CONFIG_MODEM_GSM_RSSI_POLLING_PERIOD));
 #endif
@@ -1591,11 +1600,12 @@ attaching:
 			}
 		}
 		modem_cmd_handler_tx_unlock(&gsm->context.cmd_handler);
-#if defined(MODEM_GSM_RSSI_POLLING)
+#if defined(CONFIG_MODEM_GSM_RSSI_POLLING)
 		(void)gsm_work_reschedule(&gsm->rssi_work_handle,
 					  K_SECONDS(CONFIG_MODEM_GSM_RSSI_POLLING_PERIOD));
-else
-		query_rssi_lock(&gsm);
+#else
+		(void)gsm_work_reschedule(&gsm->rssi_work_handle,
+					  K_SECONDS(0));
 #endif
 	}
 	k_sem_give(&gsm->sem_start_done);
@@ -2062,6 +2072,17 @@ static void gsm_mgmt_event_handler(struct net_mgmt_event_callback *cb,
 	}
 }
 
+static void gsm_signal_quality_init(const struct device *dev)
+{
+	struct gsm_modem *gsm = dev->data;
+	gsm->minfo.mdm_rssi = GSM_RSSI_INVALID;
+#if defined(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI)
+	gsm->minfo.mdm_rsrp = GSM_RSSI_INVALID;
+	gsm->minfo.mdm_rscp = GSM_RSSI_INVALID;
+	gsm->minfo.mdm_rsrq = GSM_RSSI_INVALID;
+#endif /* CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI */
+}
+
 static int gsm_init(const struct device *dev)
 {
 	struct gsm_modem *gsm = dev->data;
@@ -2090,6 +2111,8 @@ static int gsm_init(const struct device *dev)
 		LOG_DBG("cmd handler error %d", r);
 		return r;
 	}
+
+	gsm_signal_quality_init(dev);
 
 	/* modem information storage */
 	gsm->context.data_manufacturer = gsm->minfo.mdm_manufacturer;
