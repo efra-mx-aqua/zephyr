@@ -176,6 +176,8 @@ NET_BUF_POOL_DEFINE(gsm_recv_pool, GSM_RECV_MAX_BUF, GSM_RECV_BUF_SIZE, 0, NULL)
 K_KERNEL_STACK_DEFINE(gsm_rx_stack, CONFIG_MODEM_GSM_RX_STACK_SIZE);
 K_KERNEL_STACK_DEFINE(gsm_workq_stack, CONFIG_MODEM_GSM_WORKQ_STACK_SIZE);
 
+static void gsm_configure(struct k_work *work);
+
 static inline void gsm_ppp_lock(struct gsm_modem *gsm)
 {
 	(void)k_mutex_lock(&gsm->lock, K_FOREVER);
@@ -1004,8 +1006,24 @@ static int gsm_setup_reset(struct gsm_modem *gsm)
 					GSM_CMD_SETUP_TIMEOUT);
 	if (ret < 0) {
 		LOG_DBG("AT+CFUN=15 ret:%d", ret);
-		ret = 0;
+		ret = -EIO;
 	}
+	k_sleep(K_SECONDS(10));
+
+	if (IS_ENABLED(CONFIG_GSM_MUX)) {
+		/* Lower mux_enabled flag to trigger re-sending AT+CMUX etc */
+
+		if (gsm->ppp_dev) {
+			uart_mux_disable(gsm->ppp_dev);
+		}
+	}
+
+	/* Re-init underlying UART comms */
+	ret = modem_iface_uart_init_dev(&gsm->context.iface, DEVICE_DT_GET(GSM_UART_NODE));
+	if (ret) {
+		LOG_ERR("modem_iface_uart_init returned %d", ret);
+	}
+	
 
 	return ret;
 }
@@ -1063,9 +1081,7 @@ static int gsm_setup_mnoprof(struct gsm_modem *gsm)
 		}
 
 		/* Reboot */
-		gsm_setup_reset(gsm);
-
-		return -EAGAIN;
+		gsm->req_reset = 1;
 	}
 
 	return ret;
@@ -1331,7 +1347,7 @@ static int gsm_setup_psm(struct gsm_modem *gsm)
 		}
 		k_sleep(K_SECONDS(3));
 
-		return -EAGAIN;
+		gsm->req_reset = 1;
 	}
 
 	return ret;
@@ -1370,10 +1386,6 @@ static int gsm_modem_setup(struct gsm_modem *gsm)
 #endif
 
 	if (gsm->req_reset) {
-		ret = gsm_setup_reset(gsm);
-		if (ret == 0) {
-			gsm->req_reset = false;
-		}
 		ret = -EAGAIN;
 	} else if (!ret){
 		ret = gsm_setup_query_cellinfo(gsm);
@@ -1449,6 +1461,14 @@ static void gsm_finalize_connection(struct k_work *work)
 	}
 
 	ret = gsm_modem_setup(gsm);
+	if (ret < 0 && gsm->req_reset == 1) {
+		LOG_WRN("reset required, resetting...");
+		gsm->req_reset = 0;
+		gsm_setup_reset(gsm);
+		k_work_init_delayable(&gsm->gsm_configure_work, gsm_configure);
+		(void)gsm_work_reschedule(&gsm->gsm_configure_work, GSM_RETRY_DELAY);
+		goto unlock;
+	}
 	if (ret < 0) {
 		LOG_ERR("%s returned %d, %s", "gsm_modem_setup", ret, "retrying...");
 		(void)gsm_work_reschedule(&gsm->gsm_configure_work, GSM_RETRY_DELAY);
