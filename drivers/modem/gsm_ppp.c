@@ -1108,10 +1108,10 @@ static int gsm_setup_rat(struct gsm_modem *gsm)
 #ifdef CONFIG_MODEM_GSM_CONFIGURE_RAT2
 	sprintf(urat_cmd, "AT+URAT=%1u,%1u", CONFIG_MODEM_GSM_RAT1,
 		CONFIG_MODEM_GSM_RAT2);
-	changed = change && (gsm->minfo.mdm_rat[1] == CONFIG_MODEM_GSM_RAT2);
+	changed = changed || (gsm->minfo.mdm_rat[1] != CONFIG_MODEM_GSM_RAT2);
 #elif CONFIG_MODEM_GSM_CONFIGURE_RAT1
 	sprintf(urat_cmd, "AT+URAT=%1u", CONFIG_MODEM_GSM_RAT1);
-	changed = changed && (gsm->minfo.mdm_rat[0] == CONFIG_MODEM_GSM_RAT1);
+	changed = changed || (gsm->minfo.mdm_rat[0] != CONFIG_MODEM_GSM_RAT1);
 #endif
 
 	if (changed) {
