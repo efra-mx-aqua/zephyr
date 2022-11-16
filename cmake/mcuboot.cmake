@@ -84,7 +84,17 @@ function(zephyr_mcuboot_tasks)
   else()
     set(imgtool_extra)
   endif()
-  set(imgtool_args -- --key "${keyfile}" ${imgtool_extra})
+
+  # Use APPLICATION_IMG_VERSION to define version that will be written to the
+  # signed image
+  if(NOT APPLICATION_IMG_VERSION)
+    set(APPLICATION_IMG_VERSION "0+0")
+  endif()
+  set(imgtool_args -- --key "${keyfile}"
+    --header-size ${CONFIG_MCUBOOT_IMG_HEADER_SIZE}
+    --version "${APPLICATION_IMG_VERSION}"
+    --slot-size ${CONFIG_FLASH_LOAD_SIZE}
+    ${imgtool_extra})
 
   # Extensionless prefix of any output file.
   set(output ${ZEPHYR_BINARY_DIR}/${KERNEL_NAME})
