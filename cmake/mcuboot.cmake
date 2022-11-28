@@ -91,7 +91,7 @@ function(zephyr_mcuboot_tasks)
     set(APPLICATION_IMG_VERSION "0+0")
   endif()
   set(imgtool_args -- --key "${keyfile}"
-    --header-size ${CONFIG_MCUBOOT_IMG_HEADER_SIZE}
+    --header-size ${CONFIG_ROM_START_OFFSET}
     --version "${APPLICATION_IMG_VERSION}"
     --slot-size ${CONFIG_FLASH_LOAD_SIZE}
     ${imgtool_extra})

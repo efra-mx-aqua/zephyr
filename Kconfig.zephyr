@@ -623,12 +623,6 @@ config MCUBOOT_EXTRA_IMGTOOL_ARGS
 	  you can use this option to pass extra options to imgtool.
 	  For example, you could set this to "--version 1.2".
 
-config MCUBOOT_IMG_HEADER_SIZE
-	int "Size of the image header"
-	default 32
-	help
-	  Size of the image header in a signed image.
-
 config MCUBOOT_GENERATE_CONFIRMED_IMAGE
 	bool "Also generate a padded, confirmed image"
 	help
