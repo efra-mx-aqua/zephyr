@@ -41,6 +41,7 @@ LOG_MODULE_REGISTER(modem_gsm, CONFIG_MODEM_LOG_LEVEL);
 #define GSM_REGISTER_DELAY_MSEC         1000
 #define GSM_RETRY_DELAY                 K_SECONDS(1)
 #define GSM_REGISTER_DELAY_MSEC         1000
+#define GSM_CONFIGURE_RETRIES           10
 #define GSM_DETECTION_RETRIES           10
 #define GSM_AUTO_COPS_DELAY_MSEC     	5000
 #define GSM_RETRY_DELAY			K_SECONDS(1)
@@ -158,7 +159,7 @@ static struct gsm_modem {
 	int rssi_retries;
 	int attach_retries;
 	int auto_cops_retries;
-	int comm_retries;
+	int configure_retries;
 	bool attached : 1;
 	bool running : 1;
 	bool modem_info_queried : 1;
@@ -720,12 +721,14 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_attached)
 	return 0;
 }
 
-static int gsm_check_com(struct gsm_modem *gsm, bool lock)
+/* Send AT commands until the modem responds with OK or the
+ * the number or retries is exceeded
+ */
+static int gsm_modem_detect(struct gsm_modem *gsm, bool lock, int attemps)
 {
-	int ret = -1;
-	int counter = 0;
+	int ret = -EINVAL;
 
-	while (counter++ < GSM_DETECTION_RETRIES && ret < 0) {
+	while (attemps-- && ret < 0) {
 		k_sleep(K_SECONDS(2));
 		ret = modem_cmd_send_ext(&gsm->context.iface,
 					 &gsm->context.cmd_handler,
@@ -740,10 +743,10 @@ static int gsm_check_com(struct gsm_modem *gsm, bool lock)
 	}
 
 	if (ret < 0) {
+		/* the modem is unresponsive */
 		LOG_ERR("MODEM WAIT LOOP ERROR: %d", ret);
-		return -ENODEV;
 	}
-	return 0;
+	return ret;
 }
 
 
@@ -1023,7 +1026,7 @@ static int gsm_setup_reset(struct gsm_modem *gsm)
 	if (ret) {
 		LOG_ERR("modem_iface_uart_init returned %d", ret);
 	}
-	
+
 
 	return ret;
 }
@@ -1423,10 +1426,11 @@ static void gsm_finalize_connection(struct k_work *work)
 	}
 
 	if (IS_ENABLED(CONFIG_GSM_MUX)) {
-		ret = gsm_check_com(gsm, false);
+		ret = gsm_modem_detect(gsm, false, GSM_DETECTION_RETRIES);
 		if (ret < 0) {
-			LOG_ERR("%s returned %d, %s", "AT", ret, "retrying...");
-			(void)gsm_work_reschedule(&gsm->gsm_configure_work, GSM_RETRY_DELAY);
+			/* The modem is not responding, abort configuration */
+			LOG_ERR("%s returned %d", "AT", ret);
+			k_sem_reset(&gsm->sem_start_done);
 			goto unlock;
 		}
 	}
@@ -1604,13 +1608,7 @@ attaching:
 			LOG_DBG("iface %suart error %d", "AT ", ret);
 		} else {
 			/* Do a test and try to send AT command to modem */
-			ret = modem_cmd_send_nolock(
-				&gsm->context.iface,
-				&gsm->context.cmd_handler,
-				&response_cmds[0],
-				ARRAY_SIZE(response_cmds),
-				"AT", &gsm->sem_response,
-				GSM_CMD_AT_TIMEOUT);
+			ret = gsm_modem_detect(gsm, false, 1);
 			if (ret < 0) {
 				LOG_WRN("%s returned %d, %s", "AT", ret, "iface failed");
 			} else {
@@ -1825,6 +1823,8 @@ static void mux_setup(struct k_work *work)
 
 	goto unlock;
 fail:
+	LOG_ERR("Failed to setup UART mux");
+	k_sem_reset(&gsm->sem_start_done);
 	gsm->state = STATE_INIT;
 unlock:
 	gsm_ppp_unlock(gsm);
@@ -1844,10 +1844,11 @@ static void gsm_configure(struct k_work *work)
 		gsm->modem_on_cb(gsm->dev, gsm->user_data);
 	}
 
-	ret = gsm_check_com(gsm, false);
+	ret = gsm_modem_detect(gsm, false, GSM_DETECTION_RETRIES);
 	if (ret < 0) {
 		LOG_DBG("modem not ready %d", ret);
-		goto reschedule;
+		/* Avoid to reschedule */
+		goto fail;
 	}
 
 	if (IS_ENABLED(CONFIG_GSM_MUX)) {
@@ -1867,16 +1868,17 @@ static void gsm_configure(struct k_work *work)
 	}
 
 reschedule:
-	if (!gsm->comm_retries) {
-		gsm->comm_retries = GSM_DETECTION_RETRIES;
+	if (!gsm->configure_retries) {
+		gsm->configure_retries = GSM_CONFIGURE_RETRIES;
 	} else {
-		gsm->comm_retries--;
+		gsm->configure_retries--;
 	}
-	if (gsm->comm_retries > 0) {
+	if (gsm->configure_retries > 0) {
 		(void)gsm_work_reschedule(&gsm->gsm_configure_work, K_NO_WAIT);
 	} else {
+fail:
 		LOG_ERR("GSM configuration failed");
-		k_sem_give(&gsm->sem_start_done);
+		k_sem_reset(&gsm->sem_start_done);
 	}
 
 	gsm_ppp_unlock(gsm);
@@ -1901,7 +1903,7 @@ void gsm_ppp_start(const struct device *dev)
 		goto unlock;
 	}
 
-	gsm->comm_retries = 0;
+	gsm->configure_retries = 0;
 	gsm->ready = 0;
 	gsm->running = true;
 	k_work_init_delayable(&gsm->gsm_configure_work, gsm_configure);
@@ -1946,7 +1948,7 @@ void gsm_ppp_stop(const struct device *dev)
 		}
 
 		if (modem_cmd_handler_tx_lock(&gsm->context.cmd_handler,
-								GSM_CMD_LOCK_TIMEOUT) < 0) {
+					      GSM_CMD_LOCK_TIMEOUT) < 0) {
 			LOG_WRN("Failed locking modem cmds!");
 		}
 	}
@@ -2026,15 +2028,11 @@ int gsm_ppp_detect(const struct device *dev)
 	}
 
 	LOG_DBG("Detecting  modem %p ...", gsm);
-
-	ret = gsm_check_com(gsm, false);
-	if (ret < 0) {
-		LOG_ERR("MODEM WAIT LOOP ERROR: %d", ret);
-		return -ENODEV;
-	} else {
+	ret = gsm_modem_detect(gsm, false, GSM_DETECTION_RETRIES);
+	if (ret == 0) {
 		LOG_DBG("modem found");
 	}
-	return 0;
+	return ret;
 }
 
 int gsm_ppp_finalize(const struct device *dev)
