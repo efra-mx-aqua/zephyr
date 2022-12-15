@@ -133,6 +133,8 @@ static inline void unit_test_noop(void)
 __syscall void z_test_1cpu_start(void);
 __syscall void z_test_1cpu_stop(void);
 
+__syscall void sys_clock_tick_set(uint64_t tick);
+
 /**
  * @brief Define a SMP-unsafe test function
  *
