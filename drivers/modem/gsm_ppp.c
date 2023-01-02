@@ -633,7 +633,6 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_cesq)
 		LOG_INF("RSRQ not known");
 	}
 
-	k_sem_give(&gsm.sem_response);
 	return 0;
 }
 #endif
@@ -660,8 +659,6 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_csq)
 		gsm.minfo.mdm_rssi = rssi;
 		LOG_INF("RSSI(CSQ): %d", rssi);
 	}
-
-	k_sem_give(&gsm.sem_response);
 
 	return 0;
 }
@@ -716,7 +713,6 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_attached)
 	}
 
 	modem_cmd_handler_set_error(data, error);
-	k_sem_give(&gsm.sem_response);
 
 	return 0;
 }
@@ -1040,8 +1036,6 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_mnoprof)
 		LOG_INF("MNO profile: %d", gsm.context.data_operator_profile);
 	}
 
-	k_sem_give(&gsm.sem_response);
-
 	return 0;
 }
 
@@ -1101,7 +1095,6 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_urat)
 		LOG_INF("RAT[%d]: %u", i, gsm.minfo.mdm_rat[i]);
 	}
 
-	k_sem_give(&gsm.sem_response);
 	return 0;
 }
 
@@ -1223,7 +1216,6 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_ubandmask)
 			band_masks[i][0],band_masks[i][1]);
 	}
 
-	k_sem_give(&gsm.sem_response);
 	return 0;
 }
 
@@ -1307,7 +1299,6 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_psm)
 		LOG_INF("PSM mode: %d", gsm.context.data_psm);
 	}
 
-	k_sem_give(&gsm.sem_response);
 	return 0;
 }
 
