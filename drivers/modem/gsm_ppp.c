@@ -1628,6 +1628,10 @@ attaching:
 		(void)gsm_work_reschedule(&gsm->rssi_work_handle,
 					  K_SECONDS(0));
 #endif
+	} else {
+		/* There nothing more to do */
+		gsm->ready = 1;
+
 	}
 	k_sem_give(&gsm->sem_start_done);
 
