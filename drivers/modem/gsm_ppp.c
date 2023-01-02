@@ -617,10 +617,9 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_cesq)
 	if (rxlev >= 0 && rxlev <= 63) {
 		gsm.minfo.mdm_rssi = -110 + (rxlev - 1);
 		LOG_INF("RSSI: %d", gsm.minfo.mdm_rssi);
-	} else if (!IS_ENABLED(CONFIG_MODEM_GSM_ENABLE_CSQ_RSSI) &&
-		   gsm.minfo.mdm_rssi != GSM_RSSI_INVALID) {
+	} else if (!IS_ENABLED(CONFIG_MODEM_GSM_ENABLE_CSQ_RSSI))  {
 		gsm.minfo.mdm_rssi = GSM_RSSI_INVALID;
-		LOG_INF("RSSI not known");
+		LOG_DBG("RSSI(CSQ) not known");
 	} else {
 		/* preserve the RSSI */
 	}
@@ -642,22 +641,26 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_rssi_csq)
 {
 	/* Expected response is "+CSQ: <signal_power>,<qual>" */
 	if (argc) {
-		int rssi = atoi(argv[0]);
+		int signal_power = atoi(argv[0]);
+		int rssi = GSM_RSSI_INVALID;
+		bool update = IS_ENABLED(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI);
 
-		/* If  CESQ returned a value, give a priority to that*/
-		if (rssi >= 0 && rssi <= 31 &&
-		    (!IS_ENABLED(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI) ||
-		     GSM_RSSI_INVALID == gsm.minfo.mdm_rssi)) {
-			rssi = -113 + (rssi * 2);
-		} else if (!IS_ENABLED(CONFIG_MODEM_GSM_ENABLE_CESQ_RSSI)) {
-			gsm.minfo.mdm_rssi = rssi;
-			rssi = GSM_RSSI_INVALID;
-		} else {
-			/* preserve the RSSI */
+		if (signal_power >= 0 && signal_power <= 31) {
+			rssi = -113 + (signal_power * 2);
 		}
 
-		gsm.minfo.mdm_rssi = rssi;
-		LOG_INF("RSSI(CSQ): %d", rssi);
+		if (gsm.minfo.mdm_rssi == GSM_RSSI_INVALID) {
+			update = true;
+		}
+
+		if (update) {
+			gsm.minfo.mdm_rssi = rssi;
+		}
+		if (rssi == GSM_RSSI_INVALID) {
+			LOG_DBG("RSSI(CSQ) not known");
+		} else {
+			LOG_DBG("RSSI(CSQ): %d", rssi);
+		}
 	}
 
 	return 0;
@@ -897,6 +900,15 @@ static void query_rssi(struct gsm_modem *gsm, bool lock)
 		LOG_DBG("No answer to RSSI readout, %s", "ignoring...");
 	}
 #endif
+	if (ret < 0) {
+		return;
+	}
+
+	if (gsm->minfo.mdm_rssi == GSM_RSSI_INVALID) {
+		LOG_INF("RSSI not known");
+	} else {
+		LOG_INF("RSSI: %d", gsm->minfo.mdm_rssi);
+	}
 
 }
 
