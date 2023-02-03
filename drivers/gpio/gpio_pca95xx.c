@@ -179,7 +179,7 @@ static int write_port_regs(const struct device *dev, uint8_t reg,
 	const struct gpio_pca95xx_config * const config = dev->config;
 	struct gpio_pca95xx_drv_data * const drv_data =
 		(struct gpio_pca95xx_drv_data * const)dev->data;
-	struct device * const i2c_master = drv_data->i2c_master;
+	const struct device * const i2c_master = drv_data->i2c_master;
 	uint16_t i2c_addr = config->i2c_slave_addr;
 	uint16_t port_data;
 	uint8_t *port_data_ptr;

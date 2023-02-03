@@ -526,7 +526,6 @@ static int dtls_rx(void *ctx, unsigned char *buf, size_t len,
 	uint32_t entry_time = k_uptime_get_32();
 	socklen_t addrlen = sizeof(struct sockaddr);
 	struct sockaddr addr;
-	int err;
 	ssize_t received;
 	bool retry;
 	struct zsock_pollfd fds;
@@ -570,7 +569,7 @@ static int dtls_rx(void *ctx, unsigned char *buf, size_t len,
 #ifdef CONFIG_MBEDTLS_DTLS_SERVER
 				dtls_peer_address_set(tls_ctx, &addr, addrlen);
 
-				err = mbedtls_ssl_set_client_transport_id(
+				int err = mbedtls_ssl_set_client_transport_id(
 					&tls_ctx->ssl,
 					(const unsigned char *)&addr, addrlen);
 				if (err < 0) {
