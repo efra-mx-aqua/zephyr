@@ -21,6 +21,8 @@ manifest:
   remotes:
     - name: upstream
       url-base: https://github.com/zephyrproject-rtos
+    - name: aquarobur-external
+      url-base: git@gitlab.com:aqua-robur-tech/embedded/iotbrd/external
 
   #
   # Please add items below based on alphabetical order
@@ -198,7 +200,8 @@ manifest:
       path: modules/lib/tflite-micro
       repo-path: tflite-micro
     - name: tinycbor
-      revision: 40daca97b478989884bffb5226e9ab73ca54b8c4
+      remote: aquarobur-external
+      revision: 51b2a81873e942d19c441c2e43068179896aca00
       path: modules/lib/tinycbor
     - name: tinycrypt
       revision: 3e9a49d2672ec01435ffbf0d788db6d95ef28de0

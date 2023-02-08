@@ -44,7 +44,15 @@ config CBOR_WITHOUT_OPEN_MEMSTREAM
 
 config CBOR_PRETTY_PRINTING
 	bool "Implement pretty printing functionality"
+	select CBOR_PARSER_DUP_STRING
 	help
 	  This option enables cbor_value_to_pretty_stream function.
+
+config CBOR_PARSER_DUP_STRING
+	bool "Implement parser's string duplication functionality"
+	default y if NEWLIB_LIBC
+	help
+	  This option enables cbor_value_copy_text_string,
+	  cbor_value_dup_byte_string, cbor_value_dup_text_string functions.
 
 endif # TINYCBOR
