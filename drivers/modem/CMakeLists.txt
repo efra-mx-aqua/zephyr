@@ -17,8 +17,6 @@ zephyr_library_sources_ifdef(CONFIG_MODEM_SOCKET modem_socket.c)
 if(CONFIG_MODEM_UBLOX_SARA)
 	zephyr_library_include_directories(${ZEPHYR_BASE}/subsys/net/ip)
 	zephyr_library_sources(ublox-sara-r4.c)
-elseif(CONFIG_MODEM_UBLOX_PWR)
-	zephyr_library_sources(ublox-sara-r4_pwr.c)
 endif()
 
 if(CONFIG_MODEM_QUECTEL_BG9X)
