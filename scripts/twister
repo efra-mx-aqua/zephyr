@@ -739,6 +739,11 @@ structure in the main Zephyr tree: boards/<arch>/<board_name>/""")
     parser.add_argument("--coverage-basedir", default=ZEPHYR_BASE,
                         help="Base source directory for coverage report.")
 
+    parser.add_argument("--coverage-formats", action="store", default='html',
+                        help="Output formats to use for generated coverage reports, as a comma-separated list. "
+                             "Only used in conjunction with gcovr. "
+                             "Valid options are html, xml, csv, txt, coveralls, sonarqube.")
+
     return parser.parse_args()
 
 
@@ -1277,6 +1282,7 @@ def main():
         coverage_tool = CoverageTool.factory(options.coverage_tool)
         coverage_tool.gcov_tool = options.gcov_tool
         coverage_tool.base_dir = os.path.abspath(options.coverage_basedir)
+        coverage_tool.output_formats = options.coverage_formats
         coverage_tool.add_ignore_file('generated')
         coverage_tool.add_ignore_directory('tests')
         coverage_tool.add_ignore_directory('samples')

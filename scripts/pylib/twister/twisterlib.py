@@ -495,6 +495,7 @@ class BinaryHandler(Handler):
             if not reader_t.is_alive():
                 line = self.line
                 logger.debug("OUTPUT: {0}".format(line.decode('utf-8').rstrip()))
+
                 log_out_fp.write(line.decode('utf-8'))
                 log_out_fp.flush()
                 harness.handle(line.decode('utf-8').rstrip())
@@ -3736,6 +3737,7 @@ class CoverageTool:
     def __init__(self):
         self.gcov_tool = None
         self.base_dir = None
+        self.output_formats = None
 
     @staticmethod
     def factory(tool):
@@ -3814,9 +3816,16 @@ class CoverageTool:
         with open(os.path.join(outdir, "coverage.log"), "a") as coveragelog:
             ret = self._generate(outdir, coveragelog)
             if ret == 0:
-                logger.info("HTML report generated: {}".format(
-                    os.path.join(outdir, "coverage", "index.html")))
-
+                report_log = {
+                    "html": "HTML report generated: {}".format(os.path.join(outdir, "coverage", "index.html")),
+                    "xml": "XML report generated: {}".format(os.path.join(outdir, "coverage", "coverage.xml")),
+                    "csv": "CSV report generated: {}".format(os.path.join(outdir, "coverage", "coverage.csv")),
+                    "txt": "TXT report generated: {}".format(os.path.join(outdir, "coverage", "coverage.txt")),
+                    "coveralls": "Coveralls report generated: {}".format(os.path.join(outdir, "coverage", "coverage.coveralls.json")),
+                    "sonarqube": "Sonarqube report generated: {}".format(os.path.join(outdir, "coverage", "coverage.sonarqube.xml"))
+                }
+                for r in self.output_formats.split(','):
+                    logger.info(report_log[r])
 
 class Lcov(CoverageTool):
 
@@ -3891,6 +3900,10 @@ class Gcovr(CoverageTool):
         tuple_list = [(prefix, item) for item in list]
         return [item for sublist in tuple_list for item in sublist]
 
+    @staticmethod
+    def _flatten_list(list):
+        return [a for b in list for a in b]
+
     def _generate(self, outdir, coveragelog):
         coveragefile = os.path.join(outdir, "coverage.json")
         ztestfile = os.path.join(outdir, "ztest.json")
@@ -3902,13 +3915,16 @@ class Gcovr(CoverageTool):
                self.gcov_tool, "-e", "tests/*"] + excludes + ["--json", "-o",
                coveragefile, outdir]
         cmd_str = " ".join(cmd)
-        logger.debug(f"Running {cmd_str}...")
+        logger.debug(f"Running {cmd_str} ...")
         subprocess.call(cmd, stdout=coveragelog)
 
-        subprocess.call(["gcovr", "-r", self.base_dir, "--gcov-executable",
-                         self.gcov_tool, "-f", "tests/ztest", "-e",
-                         "tests/ztest/test/*", "--json", "-o", ztestfile,
-                         outdir], stdout=coveragelog)
+        cmd = ["gcovr", "-r", self.base_dir, "--gcov-executable",
+                self.gcov_tool, "-f", "tests/ztest", "-e",
+                "tests/ztest/test/*", "--json", "-o", ztestfile,
+                outdir]
+        cmd_str = " ".join(cmd)
+        logger.debug(f"Running {cmd_str} ...")
+        subprocess.call(cmd, stdout=coveragelog)
 
         if os.path.exists(ztestfile) and os.path.getsize(ztestfile) > 0:
             files = [coveragefile, ztestfile]
@@ -3920,10 +3936,22 @@ class Gcovr(CoverageTool):
 
         tracefiles = self._interleave_list("--add-tracefile", files)
 
-        return subprocess.call(["gcovr", "-r", self.base_dir, "--html",
-                                "--html-details"] + tracefiles +
-                               ["-o", os.path.join(subdir, "index.html")],
-                               stdout=coveragelog)
+        # Convert command line argument (comma-separated list) to gcovr flags
+        report_options = {
+            "html": ["--html", os.path.join(subdir, "index.html"), "--html-details"],
+            "xml": ["--xml", os.path.join(subdir, "coverage.xml"), "--xml-pretty"],
+            "csv": ["--csv", os.path.join(subdir, "coverage.csv")],
+            "txt": ["--txt", os.path.join(subdir, "coverage.txt")],
+            "coveralls": ["--coveralls", os.path.join(subdir, "coverage.coveralls.json"), "--coveralls-pretty"],
+            "sonarqube": ["--sonarqube", os.path.join(subdir, "coverage.sonarqube.xml")]
+        }
+        gcovr_options = self._flatten_list([report_options[r] for r in self.output_formats.split(',')])
+
+        cmd = ["gcovr", "-r", self.base_dir] + gcovr_options + tracefiles
+        cmd_str = " ".join(cmd)
+        logger.debug(f"Running {cmd_str} ...")
+        return subprocess.call(cmd, stdout=coveragelog)
+
 
 class DUT(object):
     def __init__(self,
