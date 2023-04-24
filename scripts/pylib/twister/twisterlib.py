@@ -463,6 +463,7 @@ class BinaryHandler(Handler):
         self.asan = False
         self.ubsan = False
         self.coverage = False
+        self.line = b""
 
     def try_kill_process_by_pid(self):
         if self.pid_fn:
@@ -482,40 +483,39 @@ class BinaryHandler(Handler):
             harness.handle(None)
             return
 
-        log_out_fp = open(self.log, "wt")
-        timeout_extended = False
-        timeout_time = time.time() + self.timeout
-        while True:
-            this_timeout = timeout_time - time.time()
-            if this_timeout < 0:
-                break
-            reader_t = threading.Thread(target=self._output_reader, args=(proc,), daemon=True)
-            reader_t.start()
-            reader_t.join(this_timeout)
-            if not reader_t.is_alive():
-                line = self.line
-                logger.debug("OUTPUT: {0}".format(line.decode('utf-8').rstrip()))
-                log_out_fp.write(line.decode('utf-8'))
-                log_out_fp.flush()
-                harness.handle(line.decode('utf-8').rstrip())
-                if harness.state:
-                    if not timeout_extended or harness.capture_coverage:
-                        timeout_extended = True
-                        if harness.capture_coverage:
-                            timeout_time = time.time() + 30
-                        else:
-                            timeout_time = time.time() + 2
-            else:
-                reader_t.join(0)
-                break
-        try:
-            # POSIX arch based ztests end on their own,
-            # so let's give it up to 100ms to do so
-            proc.wait(0.1)
-        except subprocess.TimeoutExpired:
-            self.terminate(proc)
-
-        log_out_fp.close()
+        with open(self.log, "wt") as log_out_fp:
+            timeout_extended = False
+            timeout_time = time.time() + self.timeout
+            while True:
+                this_timeout = timeout_time - time.time()
+                if this_timeout < 0:
+                    break
+                reader_t = threading.Thread(target=self._output_reader, args=(proc,), daemon=True)
+                reader_t.start()
+                reader_t.join(this_timeout)
+                if not reader_t.is_alive() and self.line != b"":
+                    line_decoded = self.line.decode('utf-8', "replace")
+                    stripped_line = line_decoded.rstrip()
+                    logger.debug("OUTPUT: %s", stripped_line)
+                    log_out_fp.write(line_decoded)
+                    log_out_fp.flush()
+                    harness.handle(stripped_line)
+                    if harness.state:
+                        if not timeout_extended or harness.capture_coverage:
+                            timeout_extended = True
+                            if harness.capture_coverage:
+                                timeout_time = time.time() + 30
+                            else:
+                                timeout_time = time.time() + 2
+                else:
+                    reader_t.join(0)
+                    break
+            try:
+                # POSIX arch based ztests end on their own,
+                # so let's give it up to 100ms to do so
+                proc.wait(0.1)
+            except subprocess.TimeoutExpired:
+                self.terminate(proc)
 
     def handle(self):
 
@@ -3736,6 +3736,7 @@ class CoverageTool:
     def __init__(self):
         self.gcov_tool = None
         self.base_dir = None
+        self.output_formats = None
 
     @staticmethod
     def factory(tool):
@@ -3814,9 +3815,16 @@ class CoverageTool:
         with open(os.path.join(outdir, "coverage.log"), "a") as coveragelog:
             ret = self._generate(outdir, coveragelog)
             if ret == 0:
-                logger.info("HTML report generated: {}".format(
-                    os.path.join(outdir, "coverage", "index.html")))
-
+                report_log = {
+                    "html": "HTML report generated: {}".format(os.path.join(outdir, "coverage", "index.html")),
+                    "xml": "XML report generated: {}".format(os.path.join(outdir, "coverage", "coverage.xml")),
+                    "csv": "CSV report generated: {}".format(os.path.join(outdir, "coverage", "coverage.csv")),
+                    "txt": "TXT report generated: {}".format(os.path.join(outdir, "coverage", "coverage.txt")),
+                    "coveralls": "Coveralls report generated: {}".format(os.path.join(outdir, "coverage", "coverage.coveralls.json")),
+                    "sonarqube": "Sonarqube report generated: {}".format(os.path.join(outdir, "coverage", "coverage.sonarqube.xml"))
+                }
+                for r in self.output_formats.split(','):
+                    logger.info(report_log[r])
 
 class Lcov(CoverageTool):
 
@@ -3891,6 +3899,10 @@ class Gcovr(CoverageTool):
         tuple_list = [(prefix, item) for item in list]
         return [item for sublist in tuple_list for item in sublist]
 
+    @staticmethod
+    def _flatten_list(list):
+        return [a for b in list for a in b]
+
     def _generate(self, outdir, coveragelog):
         coveragefile = os.path.join(outdir, "coverage.json")
         ztestfile = os.path.join(outdir, "ztest.json")
@@ -3902,13 +3914,16 @@ class Gcovr(CoverageTool):
                self.gcov_tool, "-e", "tests/*"] + excludes + ["--json", "-o",
                coveragefile, outdir]
         cmd_str = " ".join(cmd)
-        logger.debug(f"Running {cmd_str}...")
+        logger.debug(f"Running {cmd_str} ...")
         subprocess.call(cmd, stdout=coveragelog)
 
-        subprocess.call(["gcovr", "-r", self.base_dir, "--gcov-executable",
-                         self.gcov_tool, "-f", "tests/ztest", "-e",
-                         "tests/ztest/test/*", "--json", "-o", ztestfile,
-                         outdir], stdout=coveragelog)
+        cmd = ["gcovr", "-r", self.base_dir, "--gcov-executable",
+                self.gcov_tool, "-f", "tests/ztest", "-e",
+                "tests/ztest/test/*", "--json", "-o", ztestfile,
+                outdir]
+        cmd_str = " ".join(cmd)
+        logger.debug(f"Running {cmd_str} ...")
+        subprocess.call(cmd, stdout=coveragelog)
 
         if os.path.exists(ztestfile) and os.path.getsize(ztestfile) > 0:
             files = [coveragefile, ztestfile]
@@ -3920,10 +3935,22 @@ class Gcovr(CoverageTool):
 
         tracefiles = self._interleave_list("--add-tracefile", files)
 
-        return subprocess.call(["gcovr", "-r", self.base_dir, "--html",
-                                "--html-details"] + tracefiles +
-                               ["-o", os.path.join(subdir, "index.html")],
-                               stdout=coveragelog)
+        # Convert command line argument (comma-separated list) to gcovr flags
+        report_options = {
+            "html": ["--html", os.path.join(subdir, "index.html"), "--html-details"],
+            "xml": ["--xml", os.path.join(subdir, "coverage.xml"), "--xml-pretty"],
+            "csv": ["--csv", os.path.join(subdir, "coverage.csv")],
+            "txt": ["--txt", os.path.join(subdir, "coverage.txt")],
+            "coveralls": ["--coveralls", os.path.join(subdir, "coverage.coveralls.json"), "--coveralls-pretty"],
+            "sonarqube": ["--sonarqube", os.path.join(subdir, "coverage.sonarqube.xml")]
+        }
+        gcovr_options = self._flatten_list([report_options[r] for r in self.output_formats.split(',')])
+
+        cmd = ["gcovr", "-r", self.base_dir] + gcovr_options + tracefiles
+        cmd_str = " ".join(cmd)
+        logger.debug(f"Running {cmd_str} ...")
+        return subprocess.call(cmd, stdout=coveragelog)
+
 
 class DUT(object):
     def __init__(self,
