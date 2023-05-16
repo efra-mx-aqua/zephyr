@@ -12,6 +12,10 @@ config ADC_ADS1X1X
 
 if ADC_ADS1X1X
 
+config ADC_ADS1X1X_TRIGGER
+	bool
+	default y
+
 config ADC_ADS1X1X_INIT_PRIORITY
 	int "Init priority"
 	default 80
