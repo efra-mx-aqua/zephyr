@@ -140,10 +140,21 @@ static int cmd_get_sensor(const struct shell *shell, size_t argc, char *argv[])
 		return -ENODEV;
 	}
 
+#ifdef CONFIG_SENSOR_SHELL_AUTO_PM
+	enum pm_device_state state;
+
+	pm_device_state_get(dev, &state);
+	pm_device_state_set(dev, PM_DEVICE_STATE_ACTIVE);
+#endif
+
 	err = sensor_sample_fetch(dev);
 	if (err < 0) {
 		shell_error(shell, "Failed to read sensor: %d", err);
 	}
+
+#ifdef CONFIG_SENSOR_SHELL_AUTO_PM
+	pm_device_state_set(dev, state);
+#endif
 
 	if (argc == 2) {
 		/* read all channels */

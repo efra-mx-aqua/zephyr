@@ -36,6 +36,15 @@ config SENSOR_SHELL_BATTERY
 	  in a convenient format. It makes use of a fuel gauge to read its
 	  information.
 
+config SENSOR_SHELL_AUTO_PM
+	bool "Enable sensor shell auto-PM"
+	depends on PM_DEVICE_RUNTIME
+	default y
+	help
+	  This enables the shell's PM control, it will activate the sensor power
+	  before sampling. After sampling, the senso power state is restored.
+
+
 comment "Device Drivers"
 
 source "drivers/sensor/adt7420/Kconfig"
